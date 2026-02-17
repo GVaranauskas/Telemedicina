@@ -12,6 +12,7 @@ datasource db {
 enum UserRole {
   DOCTOR
   INSTITUTION_ADMIN
+  PATIENT
 }
 
 enum InstitutionType {
@@ -62,6 +63,7 @@ model User {
 
   doctor      Doctor?
   institution Institution?
+  patient     Patient?
 
   @@map("users")
 }
@@ -117,10 +119,154 @@ model Doctor {
   courseEnrollments CourseEnrollment[]
   instructedCourses Course[]
 
+  // Workplaces & Availability
+  workplaces     DoctorWorkplace[]
+  availabilities DoctorAvailability[]
+  appointments   Appointment[]
+
   @@unique([crm, crmState])
   @@index([city, state])
   @@index([fullName])
   @@map("doctors")
+}
+
+// ─── Patient Profile ──────────────────────────────────────────────────────
+
+model Patient {
+  id            String    @id @default(uuid())
+  userId        String    @unique
+  fullName      String
+  cpf           String?   @unique
+  phone         String?
+  dateOfBirth   DateTime?
+  gender        String?   @db.VarChar(20)
+  profilePicUrl String?
+  street        String?
+  number        String?
+  complement    String?
+  neighborhood  String?
+  city          String?
+  state         String?   @db.VarChar(2)
+  zipCode       String?   @db.VarChar(9) // CEP: 00000-000
+  latitude      Float?
+  longitude     Float?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  appointments Appointment[]
+
+  @@index([city, state])
+  @@index([fullName])
+  @@map("patients")
+}
+
+// ─── Doctor Workplace (Local de Atendimento) ─────────────────────────────
+
+model DoctorWorkplace {
+  id              String    @id @default(uuid())
+  doctorId        String
+  name            String    // Ex: "Consultório Centro", "Hospital São Lucas"
+  phone           String?
+  street          String
+  number          String
+  complement      String?
+  neighborhood    String
+  city            String
+  state           String    @db.VarChar(2)
+  zipCode         String    @db.VarChar(9) // CEP: 00000-000
+  latitude        Float
+  longitude       Float
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  doctor         Doctor              @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  availabilities DoctorAvailability[]
+  appointments   Appointment[]
+
+  @@index([doctorId])
+  @@index([city, state])
+  @@index([latitude, longitude])
+  @@map("doctor_workplaces")
+}
+
+// ─── Doctor Availability (Agenda de Horários) ────────────────────────────
+
+enum DayOfWeek {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
+
+model DoctorAvailability {
+  id            String    @id @default(uuid())
+  doctorId      String
+  workplaceId   String
+  dayOfWeek     DayOfWeek
+  startTime     String    @db.VarChar(5) // "08:00"
+  endTime       String    @db.VarChar(5) // "18:00"
+  slotDurationMin Int     @default(30)   // duração de cada consulta em minutos
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  doctor    Doctor          @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  workplace DoctorWorkplace @relation(fields: [workplaceId], references: [id], onDelete: Cascade)
+
+  @@unique([doctorId, workplaceId, dayOfWeek, startTime])
+  @@index([doctorId])
+  @@index([workplaceId])
+  @@index([dayOfWeek])
+  @@map("doctor_availabilities")
+}
+
+// ─── Appointment (Agendamento de Consulta) ───────────────────────────────
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED_BY_PATIENT
+  CANCELLED_BY_DOCTOR
+  COMPLETED
+  NO_SHOW
+}
+
+enum AppointmentType {
+  PRESENCIAL
+  TELEMEDICINA
+}
+
+model Appointment {
+  id              String            @id @default(uuid())
+  patientId       String
+  doctorId        String
+  workplaceId     String
+  scheduledAt     DateTime          // data e hora da consulta
+  durationMin     Int               @default(30)
+  type            AppointmentType   @default(PRESENCIAL)
+  status          AppointmentStatus @default(PENDING)
+  reason          String?           // motivo da consulta
+  notes           String?           // observações do médico
+  cancelledAt     DateTime?
+  cancelReason    String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  patient   Patient         @relation(fields: [patientId], references: [id])
+  doctor    Doctor          @relation(fields: [doctorId], references: [id])
+  workplace DoctorWorkplace @relation(fields: [workplaceId], references: [id])
+
+  @@index([patientId])
+  @@index([doctorId])
+  @@index([workplaceId])
+  @@index([scheduledAt])
+  @@index([status])
+  @@map("appointments")
 }
 
 // ─── Specialties & Skills ───────────────────────────────────────────────────

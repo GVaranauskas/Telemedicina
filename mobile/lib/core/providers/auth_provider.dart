@@ -122,6 +122,39 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
+  Future<bool> registerPatient({
+    required String email,
+    required String password,
+    required String fullName,
+    String? phone,
+    String? cpf,
+  }) async {
+    state = state.copyWith(status: AuthStatus.loading, error: null);
+    try {
+      final response = await _repo.registerPatient(
+        email: email,
+        password: password,
+        fullName: fullName,
+        phone: phone,
+        cpf: cpf,
+      );
+      await ApiClient.saveTokens(response.accessToken, response.refreshToken);
+      state = state.copyWith(
+        status: AuthStatus.authenticated,
+        user: response.user,
+      );
+      return true;
+    } on DioException catch (e) {
+      final msg = AuthRepository.extractError(e);
+      state = state.copyWith(status: AuthStatus.error, error: msg);
+      return false;
+    } catch (e) {
+      state = state.copyWith(
+          status: AuthStatus.error, error: 'Erro inesperado: $e');
+      return false;
+    }
+  }
+
   Future<void> logout() async {
     await _repo.logout();
     await ApiClient.clearTokens();

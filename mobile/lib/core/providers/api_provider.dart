@@ -8,6 +8,8 @@ import '../repositories/job_repository.dart';
 import '../repositories/chat_repository.dart';
 import '../repositories/notification_repository.dart';
 import '../repositories/search_repository.dart';
+import '../repositories/patient_repository.dart';
+import '../repositories/appointment_repository.dart';
 
 // ─── Core ─────────────────────────────────────────────────────
 final apiClientProvider = Provider<ApiClient>((ref) => ApiClient());
@@ -36,3 +38,9 @@ final notificationRepositoryProvider = Provider<NotificationRepository>(
 
 final searchRepositoryProvider = Provider<SearchRepository>(
     (ref) => SearchRepository(ref.watch(apiClientProvider)));
+
+final patientRepositoryProvider = Provider<PatientRepository>(
+    (ref) => PatientRepository(ref.watch(apiClientProvider)));
+
+final appointmentRepoProvider = Provider<AppointmentRepository>(
+    (ref) => AppointmentRepository(ref.watch(apiClientProvider)));

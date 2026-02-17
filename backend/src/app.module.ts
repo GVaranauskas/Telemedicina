@@ -23,6 +23,10 @@ import { JobModule } from './modules/job/job.module';
 import { ChatModule } from './modules/chat/chat.module';
 import { NotificationModule } from './modules/notification/notification.module';
 import { AgenticSearchModule } from './modules/agentic-search/agentic-search.module';
+import { PatientModule } from './modules/patient/patient.module';
+import { WorkplaceModule } from './modules/workplace/workplace.module';
+import { AvailabilityModule } from './modules/availability/availability.module';
+import { AppointmentModule } from './modules/appointment/appointment.module';
 import { EventsModule } from './events/events.module';
 
 @Module({
@@ -55,6 +59,10 @@ import { EventsModule } from './events/events.module';
     ChatModule,
     NotificationModule,
     AgenticSearchModule,
+    PatientModule,
+    WorkplaceModule,
+    AvailabilityModule,
+    AppointmentModule,
     EventsModule,
   ],
 })

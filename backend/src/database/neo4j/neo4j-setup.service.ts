@@ -36,6 +36,9 @@ export class Neo4jSetupService implements OnModuleInit {
       'CREATE CONSTRAINT event_pgid IF NOT EXISTS FOR (e:Event) REQUIRE e.pgId IS UNIQUE',
       'CREATE CONSTRAINT course_pgid IF NOT EXISTS FOR (c:Course) REQUIRE c.pgId IS UNIQUE',
       'CREATE CONSTRAINT topic_pgid IF NOT EXISTS FOR (t:Topic) REQUIRE t.pgId IS UNIQUE',
+      // Workplace & Patient nodes
+      'CREATE CONSTRAINT workplace_pgid IF NOT EXISTS FOR (w:Workplace) REQUIRE w.pgId IS UNIQUE',
+      'CREATE CONSTRAINT patient_pgid IF NOT EXISTS FOR (p:Patient) REQUIRE p.pgId IS UNIQUE',
     ];
 
     for (const constraint of constraints) {
@@ -77,6 +80,9 @@ export class Neo4jSetupService implements OnModuleInit {
       'CREATE INDEX event_startdate IF NOT EXISTS FOR (e:Event) ON (e.startDate)',
       'CREATE INDEX course_status IF NOT EXISTS FOR (c:Course) ON (c.status)',
       'CREATE INDEX topic_name IF NOT EXISTS FOR (t:Topic) ON (t.name)',
+      // Workplace geospatial index for proximity search
+      'CREATE POINT INDEX workplace_location IF NOT EXISTS FOR (w:Workplace) ON (w.location)',
+      'CREATE INDEX workplace_city IF NOT EXISTS FOR (w:Workplace) ON (w.city, w.state)',
     ];
 
     for (const index of indexes) {

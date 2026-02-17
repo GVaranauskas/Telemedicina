@@ -23,6 +23,7 @@ class UserModel {
   final String email;
   final String role;
   final String? doctorId;
+  final String? patientId;
   final String? fullName;
 
   UserModel({
@@ -30,6 +31,7 @@ class UserModel {
     required this.email,
     required this.role,
     this.doctorId,
+    this.patientId,
     this.fullName,
   });
 
@@ -39,6 +41,7 @@ class UserModel {
       email: json['email'],
       role: json['role'],
       doctorId: json['doctorId'],
+      patientId: json['patientId'],
       fullName: json['fullName'],
     );
   }
@@ -48,6 +51,10 @@ class UserModel {
         'email': email,
         'role': role,
         'doctorId': doctorId,
+        'patientId': patientId,
         'fullName': fullName,
       };
+
+  bool get isPatient => role == 'PATIENT';
+  bool get isDoctor => role == 'DOCTOR';
 }

@@ -33,7 +33,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         );
 
     if (mounted && success) {
-      context.go('/home');
+      final user = ref.read(authProvider).user;
+      if (user?.isPatient == true) {
+        context.go('/patient/search');
+      } else {
+        context.go('/home');
+      }
     }
   }
 
@@ -214,27 +219,56 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   Widget _buildRegisterLink() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
+    return Column(
       children: [
-        Text(
-          'Não tem conta? ',
-          style: AppTextStyles.bodySmall,
-        ),
-        TextButton(
-          onPressed: () => context.push('/register'),
-          style: TextButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            minimumSize: Size.zero,
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          ),
-          child: Text(
-            'Cadastrar',
-            style: AppTextStyles.bodySmall.copyWith(
-              color: AppColors.primary,
-              fontWeight: FontWeight.w600,
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              'Sou medico ',
+              style: AppTextStyles.bodySmall,
             ),
-          ),
+            TextButton(
+              onPressed: () => context.push('/register'),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: Text(
+                'Criar conta medica',
+                style: AppTextStyles.bodySmall.copyWith(
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              'Sou paciente ',
+              style: AppTextStyles.bodySmall,
+            ),
+            TextButton(
+              onPressed: () => context.push('/register/patient'),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: Text(
+                'Buscar medicos',
+                style: AppTextStyles.bodySmall.copyWith(
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
         ),
       ],
     );
