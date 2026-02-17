@@ -13,6 +13,9 @@ import '../../features/chat/presentation/chat_detail_screen.dart';
 import '../../features/smart_search/presentation/smart_search_screen.dart';
 import '../../features/notifications/presentation/notifications_screen.dart';
 import '../../features/network/presentation/network_graph_screen.dart';
+import '../../features/auth/presentation/register_patient_screen.dart';
+import '../../features/appointment/presentation/doctor_search_screen.dart';
+import '../../features/appointment/presentation/my_appointments_screen.dart';
 import '../../shared/widgets/main_scaffold.dart';
 import '../network/api_client.dart';
 
@@ -26,7 +29,7 @@ final routerProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) async {
       final location = state.uri.toString();
       final isAuthRoute =
-          location == '/login' || location == '/register';
+          location == '/login' || location == '/register' || location == '/register/patient';
 
       // Check if user has a stored token
       final token = await ApiClient.getAccessToken();
@@ -49,6 +52,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/register',
         builder: (context, state) => const RegisterScreen(),
+      ),
+      GoRoute(
+        path: '/register/patient',
+        builder: (context, state) => const RegisterPatientScreen(),
       ),
 
       // Main app with bottom nav
@@ -113,6 +120,16 @@ final routerProvider = Provider<GoRouter>((ref) {
           final query = state.uri.queryParameters['query'] ?? '';
           return SmartSearchScreen(initialQuery: query);
         },
+      ),
+
+      // Patient routes
+      GoRoute(
+        path: '/patient/search',
+        builder: (context, state) => const DoctorSearchScreen(),
+      ),
+      GoRoute(
+        path: '/patient/appointments',
+        builder: (context, state) => const MyAppointmentsScreen(),
       ),
     ],
   );

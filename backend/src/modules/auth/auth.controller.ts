@@ -14,6 +14,7 @@ import {
 } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
+import { RegisterPatientDto } from './dto/register-patient.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -30,6 +31,14 @@ export class AuthController {
   @ApiResponse({ status: 409, description: 'Email or CRM already exists' })
   async register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
+  }
+
+  @Post('register/patient')
+  @ApiOperation({ summary: 'Register a new patient account' })
+  @ApiResponse({ status: 201, description: 'Patient account created successfully' })
+  @ApiResponse({ status: 409, description: 'Email or CPF already exists' })
+  async registerPatient(@Body() dto: RegisterPatientDto) {
+    return this.authService.registerPatient(dto);
   }
 
   @Post('login')

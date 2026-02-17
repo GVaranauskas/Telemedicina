@@ -10,6 +10,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../database/prisma/prisma.service';
 import { RegisterDto } from './dto/register.dto';
+import { RegisterPatientDto } from './dto/register-patient.dto';
 import { LoginDto } from './dto/login.dto';
 import { EVENTS } from '../../events/events.constants';
 import { UserRole } from '@prisma/client';
@@ -101,10 +102,79 @@ export class AuthService {
     };
   }
 
+  async registerPatient(dto: RegisterPatientDto) {
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
+    if (existingUser) {
+      throw new ConflictException('Email already registered');
+    }
+
+    if (dto.cpf) {
+      const existingPatient = await this.prisma.patient.findUnique({
+        where: { cpf: dto.cpf.replace(/[.\-]/g, '') },
+      });
+      if (existingPatient) {
+        throw new ConflictException('CPF already registered');
+      }
+    }
+
+    const passwordHash = await bcrypt.hash(dto.password, 12);
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          email: dto.email,
+          passwordHash,
+          role: UserRole.PATIENT,
+        },
+      });
+
+      const patient = await tx.patient.create({
+        data: {
+          userId: user.id,
+          fullName: dto.fullName,
+          cpf: dto.cpf?.replace(/[.\-]/g, ''),
+          phone: dto.phone,
+          dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : null,
+          gender: dto.gender,
+        },
+      });
+
+      return { user, patient };
+    });
+
+    this.eventEmitter.emit(EVENTS.PATIENT_CREATED, {
+      id: result.patient.id,
+      fullName: result.patient.fullName,
+    });
+
+    const tokens = await this.generateTokens(
+      result.user.id,
+      result.user.email,
+      result.user.role,
+    );
+
+    await this.prisma.user.update({
+      where: { id: result.user.id },
+      data: { refreshToken: await bcrypt.hash(tokens.refreshToken, 10) },
+    });
+
+    return {
+      user: {
+        id: result.user.id,
+        email: result.user.email,
+        role: result.user.role,
+        patientId: result.patient.id,
+      },
+      ...tokens,
+    };
+  }
+
   async login(dto: LoginDto) {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
-      include: { doctor: true, institution: true },
+      include: { doctor: true, institution: true, patient: true },
     });
 
     if (!user) {
@@ -131,6 +201,7 @@ export class AuthService {
         role: user.role,
         doctorId: user.doctor?.id,
         institutionId: user.institution?.id,
+        patientId: user.patient?.id,
       },
       ...tokens,
     };

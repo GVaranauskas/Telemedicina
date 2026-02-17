@@ -11,4 +11,10 @@ export const EVENTS = {
   POST_CREATED: 'post.created',
   POST_LIKED: 'post.liked',
   POST_COMMENTED: 'post.commented',
+  PATIENT_CREATED: 'patient.created',
+  PATIENT_UPDATED: 'patient.updated',
+  WORKPLACE_CREATED: 'workplace.created',
+  WORKPLACE_UPDATED: 'workplace.updated',
+  APPOINTMENT_CREATED: 'appointment.created',
+  APPOINTMENT_CANCELLED: 'appointment.cancelled',
 };
