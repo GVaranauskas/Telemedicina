@@ -1,0 +1,79 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: medconnect-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: medconnect
+      POSTGRES_USER: medconnect
+      POSTGRES_PASSWORD: medconnect_dev_2026
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U medconnect']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  neo4j:
+    image: neo4j:5-community
+    container_name: medconnect-neo4j
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH: neo4j/medconnect_dev_2026
+      NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_dbms_security_procedures_unrestricted: apoc.*
+    ports:
+      - '7474:7474'   # Browser
+      - '7687:7687'   # Bolt
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    healthcheck:
+      test: ['CMD', 'neo4j', 'status']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  scylladb:
+    image: scylladb/scylla:5.4
+    container_name: medconnect-scylladb
+    restart: unless-stopped
+    command: --smp 1 --memory 512M --overprovisioned 1 --api-address 0.0.0.0
+    ports:
+      - '9042:9042'   # CQL
+      - '9180:9180'   # REST API
+    volumes:
+      - scylla_data:/var/lib/scylla
+    healthcheck:
+      test: ['CMD-SHELL', 'nodetool status | grep -q UN']
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    container_name: medconnect-redis
+    restart: unless-stopped
+    command: redis-server --requirepass medconnect_dev_2026
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', '-a', 'medconnect_dev_2026', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+  neo4j_data:
+  neo4j_logs:
+  scylla_data:
+  redis_data:

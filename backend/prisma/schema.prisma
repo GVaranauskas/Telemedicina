@@ -1,0 +1,862 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ──────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  DOCTOR
+  INSTITUTION_ADMIN
+}
+
+enum InstitutionType {
+  HOSPITAL
+  CLINICA
+  UBS
+  LABORATORIO
+  PRONTO_SOCORRO
+  CONSULTORIO
+}
+
+enum JobType {
+  PLANTAO
+  CONSULTA
+}
+
+enum JobShift {
+  DIURNO
+  NOTURNO
+  INTEGRAL
+  FLEXIVEL
+}
+
+enum ApplicationStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  WITHDRAWN
+}
+
+enum ConnectionStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+// ─── User & Authentication ──────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  passwordHash  String
+  role          UserRole  @default(DOCTOR)
+  isVerified    Boolean   @default(false)
+  refreshToken  String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  doctor      Doctor?
+  institution Institution?
+
+  @@map("users")
+}
+
+// ─── Doctor Profile ─────────────────────────────────────────────────────────
+
+model Doctor {
+  id              String    @id @default(uuid())
+  userId          String    @unique
+  fullName        String
+  crm             String
+  crmState        String    @db.VarChar(2)
+  crmVerified     Boolean   @default(false)
+  phone           String?
+  bio             String?
+  profilePicUrl   String?
+  graduationYear  Int?
+  universityName  String?
+  city            String?
+  state           String?   @db.VarChar(2)
+  latitude        Float?
+  longitude       Float?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  specialties     DoctorSpecialty[]
+  skills          DoctorSkill[]
+  experiences     DoctorExperience[]
+  jobApplications JobApplication[]
+
+  // Connection requests sent and received
+  sentConnections     ConnectionRequest[] @relation("SentConnections")
+  receivedConnections ConnectionRequest[] @relation("ReceivedConnections")
+
+  // Scientific collaboration
+  publications          PublicationAuthor[]
+  caseStudies           CaseStudy[]
+  caseParticipations    CaseParticipant[]
+  caseComments          CaseComment[]
+  studyGroupMemberships StudyGroupMember[]
+  projectMemberships    ResearchProjectMember[]
+
+  // Career & Mentorship
+  certifications    DoctorCertification[]
+  careerProgress    DoctorCareerProgress[]
+  mentorships       Mentorship[]        @relation("MentorMentorships")
+  menteeShips       Mentorship[]        @relation("MenteeMentorships")
+
+  // Events & Courses
+  eventAttendances  EventAttendee[]
+  eventSpeakerAt    EventSpeaker[]
+  courseEnrollments CourseEnrollment[]
+  instructedCourses Course[]
+
+  @@unique([crm, crmState])
+  @@index([city, state])
+  @@index([fullName])
+  @@map("doctors")
+}
+
+// ─── Specialties & Skills ───────────────────────────────────────────────────
+
+model Specialty {
+  id    String @id @default(uuid())
+  name  String @unique
+  code  String @unique  // Código RQE
+
+  doctors    DoctorSpecialty[]
+  jobs       Job[]
+  publications PublicationSpecialty[]
+  caseStudies  CaseStudy[]
+  studyGroups  StudyGroup[]
+  careerPaths  CareerPath[]
+  certifications Certification[]
+
+  @@map("specialties")
+}
+
+model DoctorSpecialty {
+  id          String    @id @default(uuid())
+  doctorId    String
+  specialtyId String
+  isPrimary   Boolean   @default(false)
+  rqeNumber   String?   // Registro de Qualificação de Especialista
+
+  doctor    Doctor    @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  specialty Specialty @relation(fields: [specialtyId], references: [id])
+
+  @@unique([doctorId, specialtyId])
+  @@map("doctor_specialties")
+}
+
+model Skill {
+  id   String @id @default(uuid())
+  name String @unique
+
+  doctors DoctorSkill[]
+
+  @@map("skills")
+}
+
+model DoctorSkill {
+  id       String @id @default(uuid())
+  doctorId String
+  skillId  String
+
+  doctor Doctor @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  skill  Skill  @relation(fields: [skillId], references: [id])
+
+  @@unique([doctorId, skillId])
+  @@map("doctor_skills")
+}
+
+// ─── Doctor Experience ──────────────────────────────────────────────────────
+
+model DoctorExperience {
+  id            String    @id @default(uuid())
+  doctorId      String
+  institutionId String?
+  role          String
+  description   String?
+  startDate     DateTime
+  endDate       DateTime?
+  isCurrent     Boolean   @default(false)
+
+  doctor      Doctor       @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  institution Institution? @relation(fields: [institutionId], references: [id])
+
+  @@map("doctor_experiences")
+}
+
+// ─── Institution ────────────────────────────────────────────────────────────
+
+model Institution {
+  id          String          @id @default(uuid())
+  adminUserId String          @unique
+  name        String
+  type        InstitutionType
+  cnpj        String?         @unique
+  phone       String?
+  email       String?
+  website     String?
+  description String?
+  logoUrl     String?
+  street      String?
+  number      String?
+  complement  String?
+  neighborhood String?
+  city        String
+  state       String          @db.VarChar(2)
+  zipCode     String?
+  latitude    Float?
+  longitude   Float?
+  isVerified  Boolean         @default(false)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  adminUser   User              @relation(fields: [adminUserId], references: [id])
+  jobs        Job[]
+  experiences DoctorExperience[]
+  events      Event[]            // organized events
+
+  @@index([city, state])
+  @@index([type])
+  @@map("institutions")
+}
+
+// ─── Jobs ───────────────────────────────────────────────────────────────────
+
+model Job {
+  id            String    @id @default(uuid())
+  institutionId String
+  title         String
+  type          JobType
+  description   String
+  requirements  String?
+  salaryMin     Float?
+  salaryMax     Float?
+  shift         JobShift
+  city          String
+  state         String    @db.VarChar(2)
+  specialtyId   String?
+  isActive      Boolean   @default(true)
+  startsAt      DateTime?
+  expiresAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  institution  Institution      @relation(fields: [institutionId], references: [id])
+  specialty    Specialty?       @relation(fields: [specialtyId], references: [id])
+  applications JobApplication[]
+
+  @@index([city, state])
+  @@index([type])
+  @@index([specialtyId])
+  @@index([isActive, createdAt])
+  @@map("jobs")
+}
+
+model JobApplication {
+  id          String            @id @default(uuid())
+  jobId       String
+  doctorId    String
+  status      ApplicationStatus @default(PENDING)
+  coverLetter String?
+  appliedAt   DateTime          @default(now())
+  respondedAt DateTime?
+
+  job    Job    @relation(fields: [jobId], references: [id])
+  doctor Doctor @relation(fields: [doctorId], references: [id])
+
+  @@unique([jobId, doctorId])
+  @@map("job_applications")
+}
+
+// ─── Connection Requests (tracked in PG for audit, graph in Neo4j) ──────────
+
+model ConnectionRequest {
+  id         String           @id @default(uuid())
+  senderId   String
+  receiverId String
+  status     ConnectionStatus @default(PENDING)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  sender   Doctor @relation("SentConnections", fields: [senderId], references: [id])
+  receiver Doctor @relation("ReceivedConnections", fields: [receiverId], references: [id])
+
+  @@unique([senderId, receiverId])
+  @@map("connection_requests")
+}
+
+// ─── Scientific Collaboration ───────────────────────────────────────────────
+
+enum PublicationType {
+  ARTICLE
+  CASE_REPORT
+  REVIEW
+  BOOK_CHAPTER
+  CONFERENCE_PAPER
+}
+
+enum AuthorRole {
+  FIRST_AUTHOR
+  CO_AUTHOR
+  CORRESPONDING_AUTHOR
+}
+
+model Publication {
+  id              String           @id @default(uuid())
+  title           String
+  abstract        String?
+  doi             String?          @unique
+  journal         String?
+  publicationType PublicationType  @default(ARTICLE)
+  publishDate     DateTime?
+  keywords        String[]         @default([])
+  externalUrl     String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  authors     PublicationAuthor[]
+  citations   Citation[]        @relation("PublicationCited")
+  citedBy     Citation[]        @relation("PublicationCiting")
+  specialties PublicationSpecialty[]
+
+  @@index([title])
+  @@index([publicationType])
+  @@map("publications")
+}
+
+model PublicationAuthor {
+  id            String     @id @default(uuid())
+  publicationId String
+  doctorId      String
+  authorRole    AuthorRole @default(CO_AUTHOR)
+  authorOrder   Int        @default(1)
+
+  publication Publication @relation(fields: [publicationId], references: [id], onDelete: Cascade)
+  doctor      Doctor      @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@unique([publicationId, doctorId])
+  @@map("publication_authors")
+}
+
+model Citation {
+  id          String @id @default(uuid())
+  citingPubId String
+  citedPubId  String
+
+  citingPublication Publication @relation("PublicationCiting", fields: [citingPubId], references: [id], onDelete: Cascade)
+  citedPublication  Publication @relation("PublicationCited", fields: [citedPubId], references: [id], onDelete: Cascade)
+
+  @@unique([citingPubId, citedPubId])
+  @@map("citations")
+}
+
+model PublicationSpecialty {
+  id            String @id @default(uuid())
+  publicationId String
+  specialtyId   String
+
+  publication Publication @relation(fields: [publicationId], references: [id], onDelete: Cascade)
+  specialty   Specialty  @relation(fields: [specialtyId], references: [id])
+
+  @@unique([publicationId, specialtyId])
+  @@map("publication_specialties")
+}
+
+// ─── Case Studies (Clinical Cases) ──────────────────────────────────────────
+
+enum CaseStatus {
+  OPEN
+  DISCUSSION
+  RESOLVED
+  CLOSED
+}
+
+model CaseStudy {
+  id          String     @id @default(uuid())
+  title       String
+  description String
+  diagnosis   String?
+  treatment   String?
+  outcome     String?
+  specialtyId String?
+  status      CaseStatus @default(OPEN)
+  isAnonymous Boolean    @default(false)
+  viewCount   Int        @default(0)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  specialty    Specialty?     @relation(fields: [specialtyId], references: [id])
+  author       Doctor         @relation(fields: [authorId], references: [id])
+  authorId     String
+  participants CaseParticipant[]
+  comments     CaseComment[]
+
+  @@index([status])
+  @@index([specialtyId])
+  @@map("case_studies")
+}
+
+model CaseParticipant {
+  id       String   @id @default(uuid())
+  caseId   String
+  doctorId String
+  joinedAt DateTime @default(now())
+
+  caseStudy CaseStudy @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  doctor    Doctor    @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@unique([caseId, doctorId])
+  @@map("case_participants")
+}
+
+model CaseComment {
+  id        String   @id @default(uuid())
+  caseId    String
+  doctorId  String
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  caseStudy CaseStudy @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  doctor    Doctor    @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@index([caseId])
+  @@map("case_comments")
+}
+
+// ─── Study Groups ───────────────────────────────────────────────────────────
+
+enum StudyGroupRole {
+  ADMIN
+  MODERATOR
+  MEMBER
+}
+
+model StudyGroup {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  specialtyId String?
+  isPublic    Boolean  @default(false)
+  maxMembers  Int?
+  memberCount Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  specialty Specialty?       @relation(fields: [specialtyId], references: [id])
+  members   StudyGroupMember[]
+  meetings  StudyGroupMeeting[]
+
+  @@index([specialtyId])
+  @@index([isPublic])
+  @@map("study_groups")
+}
+
+model StudyGroupMember {
+  id       String         @id @default(uuid())
+  groupId  String
+  doctorId String
+  role     StudyGroupRole @default(MEMBER)
+  joinedAt DateTime       @default(now())
+
+  studyGroup StudyGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  doctor     Doctor     @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, doctorId])
+  @@map("study_group_members")
+}
+
+model StudyGroupMeeting {
+  id          String   @id @default(uuid())
+  groupId     String
+  title       String
+  description String?
+  scheduledAt DateTime
+  durationMin Int      @default(60)
+  meetingUrl  String?
+  isCompleted Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  studyGroup StudyGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@index([scheduledAt])
+  @@map("study_group_meetings")
+}
+
+// ─── Research Projects ──────────────────────────────────────────────────────
+
+enum ProjectRole {
+  PRINCIPAL_INVESTIGATOR
+  CO_INVESTIGATOR
+  RESEARCHER
+  ASSISTANT
+}
+
+enum ProjectStatus {
+  PLANNING
+  ACTIVE
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+model ResearchProject {
+  id            String        @id @default(uuid())
+  title         String
+  description   String?
+  status        ProjectStatus @default(PLANNING)
+  startDate     DateTime?
+  endDate       DateTime?
+  fundingSource String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  members ResearchProjectMember[]
+
+  @@index([status])
+  @@map("research_projects")
+}
+
+model ResearchProjectMember {
+  id        String      @id @default(uuid())
+  projectId String
+  doctorId  String
+  role      ProjectRole @default(RESEARCHER)
+  joinedAt  DateTime    @default(now())
+
+  project ResearchProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  doctor  Doctor          @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, doctorId])
+  @@map("research_project_members")
+}
+
+// ─── Career & Mentorship ─────────────────────────────────────────────────────
+
+enum CertificationType {
+  MEDICAL_BOARD
+  SPECIALTY
+  SUBSPECIALTY
+  CONTINUING_EDUCATION
+  TECHNICAL
+}
+
+enum MentorshipStatus {
+  ACTIVE
+  COMPLETED
+  PAUSED
+  CANCELLED
+}
+
+model Certification {
+  id                String            @id @default(uuid())
+  name              String
+  issuingBody       String            // órgão emissor (ex: AMB, SBACV)
+  certificationType CertificationType
+  specialtyId       String?
+  validityYears     Int?              // validade em anos (null = permanente)
+  description       String?
+  requirementsUrl   String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  specialty   Specialty?          @relation(fields: [specialtyId], references: [id])
+  doctorCerts DoctorCertification[]
+
+  @@index([certificationType])
+  @@index([issuingBody])
+  @@map("certifications")
+}
+
+model DoctorCertification {
+  id              String    @id @default(uuid())
+  doctorId        String
+  certificationId String
+  issueDate       DateTime
+  expiryDate      DateTime?
+  certificateNum  String?
+  isVerified      Boolean   @default(false)
+  documentUrl     String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  doctor        Doctor       @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  certification Certification @relation(fields: [certificationId], references: [id])
+
+  @@unique([doctorId, certificationId])
+  @@index([expiryDate])
+  @@map("doctor_certifications")
+}
+
+model CareerPath {
+  id            String   @id @default(uuid())
+  name          String   // ex: "Cardiologista Clínico", "Cirurgião Cardíaco"
+  description   String?
+  specialtyId   String
+  avgDurationYears Int? // tempo médio para completar
+  isOfficial    Boolean  @default(false) // carreira oficial reconhecida
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  specialty  Specialty?          @relation(fields: [specialtyId], references: [id])
+  milestones CareerMilestone[]
+  progresses DoctorCareerProgress[]
+
+  @@index([specialtyId])
+  @@map("career_paths")
+}
+
+model CareerMilestone {
+  id           String   @id @default(uuid())
+  careerPathId String
+  name         String   // ex: "Residência em Cardiologia", "Título de Especialista"
+  description  String?
+  orderNum     Int      // ordem do marco na carreira
+  isRequired   Boolean  @default(true)
+  typicalYears Int?     // anos típicos de experiência necessários
+  createdAt    DateTime @default(now())
+
+  careerPath CareerPath            @relation(fields: [careerPathId], references: [id], onDelete: Cascade)
+  progresses DoctorCareerProgress[]
+
+  @@unique([careerPathId, orderNum])
+  @@map("career_milestones")
+}
+
+model DoctorCareerProgress {
+  id           String   @id @default(uuid())
+  doctorId     String
+  careerPathId String
+  milestoneId  String
+  status       String   @default("NOT_STARTED") // NOT_STARTED, IN_PROGRESS, COMPLETED
+  completedAt  DateTime?
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  doctor     Doctor          @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  careerPath CareerPath      @relation(fields: [careerPathId], references: [id], onDelete: Cascade)
+  milestone  CareerMilestone @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
+
+  @@unique([doctorId, careerPathId, milestoneId])
+  @@map("doctor_career_progress")
+}
+
+model Mentorship {
+  id          String           @id @default(uuid())
+  mentorId    String
+  menteeId    String
+  status      MentorshipStatus @default(ACTIVE)
+  startDate   DateTime         @default(now())
+  endDate     DateTime?
+  goals       String?          // objetivos da mentoria
+  focusArea   String?          // área de foco (especialidade, skill, etc)
+  notes       String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  mentor Doctor @relation("MentorMentorships", fields: [mentorId], references: [id])
+  mentee Doctor @relation("MenteeMentorships", fields: [menteeId], references: [id])
+
+  @@unique([mentorId, menteeId])
+  @@index([status])
+  @@map("mentorships")
+}
+
+// ─── Events, Courses & Topics ───────────────────────────────────────────────
+
+enum EventType {
+  CONGRESS
+  SYMPOSIUM
+  WORKSHOP
+  WEBINAR
+  CONFERENCE
+  MEETUP
+}
+
+enum EventStatus {
+  UPCOMING
+  ONGOING
+  COMPLETED
+  CANCELLED
+}
+
+enum CourseStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum EnrollmentStatus {
+  ENROLLED
+  IN_PROGRESS
+  COMPLETED
+  DROPPED
+}
+
+model Topic {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  events  EventTopic[]
+  courses CourseTopic[]
+
+  @@map("topics")
+}
+
+model Event {
+  id           String      @id @default(uuid())
+  title        String
+  description  String?
+  eventType    EventType
+  status       EventStatus @default(UPCOMING)
+  startDate    DateTime
+  endDate      DateTime?
+  location     String?     // physical location or ONLINE
+  eventUrl     String?     // registration link
+  maxAttendees Int?
+  attendeeCount Int        @default(0)
+  isOnline     Boolean     @default(false)
+  isFree       Boolean     @default(true)
+  price        Float?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  organizerId String
+  organizer   Institution @relation(fields: [organizerId], references: [id])
+
+  topics       EventTopic[]
+  attendees    EventAttendee[]
+  speakers     EventSpeaker[]
+
+  @@index([startDate])
+  @@index([eventType])
+  @@index([status])
+  @@map("events")
+}
+
+model EventTopic {
+  id      String @id @default(uuid())
+  eventId String
+  topicId String
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  topic Topic @relation(fields: [topicId], references: [id])
+
+  @@unique([eventId, topicId])
+  @@map("event_topics")
+}
+
+model EventAttendee {
+  id        String   @id @default(uuid())
+  eventId   String
+  doctorId  String
+  registeredAt DateTime @default(now())
+  attendedAt DateTime?
+  certificateUrl String?
+
+  event  Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  doctor Doctor @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, doctorId])
+  @@map("event_attendees")
+}
+
+model EventSpeaker {
+  id        String   @id @default(uuid())
+  eventId   String
+  doctorId  String
+  topic     String?  // what they will speak about
+  orderNum  Int      @default(1)
+
+  event  Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  doctor Doctor @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, doctorId])
+  @@map("event_speakers")
+}
+
+model Course {
+  id           String       @id @default(uuid())
+  title        String
+  description  String?
+  instructorId String       // doctor who created the course
+  status       CourseStatus @default(DRAFT)
+  durationHours Int?
+  level        String?      // BEGINNER, INTERMEDIATE, ADVANCED
+  price        Float?       // null = free
+  thumbnailUrl String?
+  enrollmentCount Int       @default(0)
+  rating       Float?       @default(0)
+  reviewCount  Int          @default(0)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  instructor Doctor @relation(fields: [instructorId], references: [id])
+
+  topics     CourseTopic[]
+  enrollments CourseEnrollment[]
+  modules    CourseModule[]
+
+  @@index([status])
+  @@index([instructorId])
+  @@map("courses")
+}
+
+model CourseModule {
+  id          String   @id @default(uuid())
+  courseId    String
+  title       String
+  description String?
+  orderNum    Int
+  durationMin Int?
+  videoUrl    String?
+  contentUrl  String?
+
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([courseId, orderNum])
+  @@map("course_modules")
+}
+
+model CourseTopic {
+  id       String @id @default(uuid())
+  courseId String
+  topicId  String
+
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  topic  Topic  @relation(fields: [topicId], references: [id])
+
+  @@unique([courseId, topicId])
+  @@map("course_topics")
+}
+
+model CourseEnrollment {
+  id         String          @id @default(uuid())
+  courseId   String
+  doctorId   String
+  status     EnrollmentStatus @default(ENROLLED)
+  progress   Int             @default(0) // percentage
+  enrolledAt DateTime        @default(now())
+  completedAt DateTime?
+  certificateUrl String?
+
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  doctor Doctor @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@unique([courseId, doctorId])
+  @@map("course_enrollments")
+}
