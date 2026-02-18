@@ -10,6 +10,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../database/prisma/prisma.service';
 import { RegisterDto } from './dto/register.dto';
+import { RegisterPatientDto } from './dto/register-patient.dto';
 import { LoginDto } from './dto/login.dto';
 import { EVENTS } from '../../events/events.constants';
 import { UserRole } from '@prisma/client';
@@ -96,6 +97,76 @@ export class AuthService {
         email: result.user.email,
         role: result.user.role,
         doctorId: result.doctor.id,
+      },
+      ...tokens,
+    };
+  }
+
+  async registerPatient(dto: RegisterPatientDto) {
+    // Check if email already exists
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
+    if (existingUser) {
+      throw new ConflictException('Email already registered');
+    }
+
+    // Check if CPF already exists
+    if (dto.cpf) {
+      const existingPatient = await this.prisma.patient.findUnique({
+        where: { cpf: dto.cpf },
+      });
+      if (existingPatient) {
+        throw new ConflictException('CPF already registered');
+      }
+    }
+
+    // Hash password
+    const passwordHash = await bcrypt.hash(dto.password, 12);
+
+    // Create user + patient in transaction
+    const result = await this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          email: dto.email,
+          passwordHash,
+          role: UserRole.PATIENT,
+        },
+      });
+
+      const patient = await tx.patient.create({
+        data: {
+          userId: user.id,
+          fullName: dto.fullName,
+          cpf: dto.cpf,
+          phone: dto.phone,
+          state: dto.state,
+          city: dto.city,
+        },
+      });
+
+      return { user, patient };
+    });
+
+    // Generate tokens
+    const tokens = await this.generateTokens(
+      result.user.id,
+      result.user.email,
+      result.user.role,
+    );
+
+    // Store refresh token
+    await this.prisma.user.update({
+      where: { id: result.user.id },
+      data: { refreshToken: await bcrypt.hash(tokens.refreshToken, 10) },
+    });
+
+    return {
+      user: {
+        id: result.user.id,
+        email: result.user.email,
+        role: result.user.role,
+        patientId: result.patient.id,
       },
       ...tokens,
     };

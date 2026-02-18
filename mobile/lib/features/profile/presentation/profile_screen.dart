@@ -25,340 +25,193 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final state = ref.watch(profileProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Meu Perfil'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.edit_outlined),
-            onPressed: state.doctor != null
-                ? () => _showEditProfileSheet(context, state.doctor!)
-                : null,
-          ),
-          PopupMenuButton(
-            itemBuilder: (context) => [
-              const PopupMenuItem(value: 'logout', child: Text('Sair')),
-            ],
-            onSelected: (value) async {
-              if (value == 'logout') {
-                await ref.read(authProvider.notifier).logout();
-                if (mounted) context.go('/login');
-              }
-            },
-          ),
-        ],
-      ),
+      backgroundColor: AppColors.background,
       body: state.isLoading
           ? const Center(child: CircularProgressIndicator())
           : state.error != null
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(state.error!, style: TextStyle(color: AppColors.error)),
-                      const SizedBox(height: 16),
-                      ElevatedButton(
-                        onPressed: () => ref.read(profileProvider.notifier).loadMyProfile(),
-                        child: const Text('Tentar novamente'),
-                      ),
-                    ],
-                  ),
-                )
+              ? _buildErrorState(state.error!)
               : state.doctor != null
-                  ? _buildProfile(context, state.doctor!)
+                  ? _buildProfile(state.doctor!)
                   : const Center(child: Text('Perfil não encontrado')),
     );
   }
 
-  Widget _buildProfile(BuildContext context, DoctorModel doctor) {
-    return RefreshIndicator(
-      onRefresh: () => ref.read(profileProvider.notifier).loadMyProfile(),
-      child: SingleChildScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        child: Column(
-          children: [
-            // Profile header
-            Container(
-              padding: const EdgeInsets.all(24),
-              color: AppColors.surface,
-              child: Column(
-                children: [
-                  CircleAvatar(
-                    radius: 50,
-                    backgroundColor: AppColors.primaryLight,
-                    backgroundImage: doctor.profilePicUrl != null
-                        ? NetworkImage(doctor.profilePicUrl!)
-                        : null,
-                    child: doctor.profilePicUrl == null
-                        ? Text(
-                            doctor.fullName.isNotEmpty
-                                ? doctor.fullName[0].toUpperCase()
-                                : 'D',
-                            style: const TextStyle(
-                                fontSize: 36,
-                                color: AppColors.primary,
-                                fontWeight: FontWeight.bold),
-                          )
-                        : null,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    doctor.fullName,
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    doctor.crmFormatted,
-                    style: TextStyle(color: AppColors.textSecondary),
-                  ),
-                  if (doctor.city != null || doctor.state != null) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      [doctor.city, doctor.state]
-                          .where((e) => e != null)
-                          .join(', '),
-                      style: TextStyle(color: AppColors.textSecondary),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            const SizedBox(height: 8),
-
-            // Bio
-            if (doctor.bio != null && doctor.bio!.isNotEmpty)
-              _buildSection(context, 'Sobre', doctor.bio!),
-
-            // Specialties
-            if (doctor.specialties.isNotEmpty)
-              _buildChipSection(
-                context,
-                'Especialidades',
-                doctor.specialties.map((s) => s.name ?? 'Especialidade').toList(),
-                AppColors.primary,
-              ),
-
-            // Skills
-            if (doctor.skills.isNotEmpty)
-              _buildChipSection(
-                context,
-                'Habilidades',
-                doctor.skills.map((s) => s.name ?? 'Habilidade').toList(),
-                AppColors.secondary,
-              ),
-
-            // Experience
-            if (doctor.experiences.isNotEmpty)
-              _buildExperienceSection(context, doctor.experiences),
-
-            // Education
-            if (doctor.universityName != null) ...[
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                margin: const EdgeInsets.only(bottom: 8),
-                color: AppColors.surface,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Formação',
-                        style: TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.w600)),
-                    const SizedBox(height: 8),
-                    Text(
-                      '${doctor.universityName}${doctor.graduationYear != null ? ' (${doctor.graduationYear})' : ''}',
-                      style: TextStyle(color: AppColors.textSecondary),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-
-            const SizedBox(height: 32),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSection(BuildContext context, String title, String content) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      margin: const EdgeInsets.only(bottom: 8),
-      color: AppColors.surface,
+  Widget _buildErrorState(String error) {
+    return Center(
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(title,
-              style:
-                  const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 8),
-          Text(content, style: TextStyle(color: AppColors.textSecondary)),
+          Icon(Icons.error_outline, size: 48, color: AppColors.error),
+          const SizedBox(height: 16),
+          Text(error, style: AppTextStyles.bodyMedium),
+          const SizedBox(height: 16),
+          ElevatedButton(
+            onPressed: () => ref.read(profileProvider.notifier).loadMyProfile(),
+            child: const Text('Tentar novamente'),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildChipSection(
-    BuildContext context,
-    String title,
-    List<String> items,
-    Color color,
-  ) {
+  Widget _buildProfile(DoctorModel doctor) {
+    return CustomScrollView(
+      slivers: [
+        // Header minimalista
+        SliverToBoxAdapter(
+          child: _buildProfileHeader(doctor),
+        ),
+        // Conteúdo
+        SliverPadding(
+          padding: const EdgeInsets.all(16),
+          sliver: SliverList(
+            delegate: SliverChildListDelegate([
+              if (doctor.bio != null && doctor.bio!.isNotEmpty)
+                _buildSection('Sobre', doctor.bio!),
+              if (doctor.specialties.isNotEmpty)
+                _buildChipSection('Especialidades', 
+                  doctor.specialties.map((s) => s.name ?? '').where((n) => n.isNotEmpty).toList()),
+              if (doctor.skills.isNotEmpty)
+                _buildChipSection('Habilidades',
+                  doctor.skills.map((s) => s.name ?? '').where((n) => n.isNotEmpty).toList()),
+              const SizedBox(height: 24),
+              _buildLogoutButton(),
+              const SizedBox(height: 32),
+            ]),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildProfileHeader(DoctorModel doctor) {
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      margin: const EdgeInsets.only(bottom: 8),
-      color: AppColors.surface,
+      padding: const EdgeInsets.fromLTRB(24, 60, 24, 32),
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(24),
+          bottomRight: Radius.circular(24),
+        ),
+      ),
+      child: Column(
+        children: [
+          // Avatar
+          Container(
+            width: 100,
+            height: 100,
+            decoration: BoxDecoration(
+              color: AppColors.primaryLight,
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: Center(
+              child: Text(
+                doctor.fullName.isNotEmpty ? doctor.fullName[0].toUpperCase() : 'D',
+                style: AppTextStyles.displaySmall.copyWith(color: AppColors.primary),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          // Nome
+          Text(
+            doctor.fullName,
+            style: AppTextStyles.headingMedium,
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 4),
+          // CRM
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: AppColors.primaryLight,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              doctor.crmFormatted,
+              style: AppTextStyles.labelMedium.copyWith(color: AppColors.primary),
+            ),
+          ),
+          if (doctor.city != null || doctor.state != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              [doctor.city, doctor.state].where((e) => e != null).join(', '),
+              style: AppTextStyles.bodySmall,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSection(String title, String content) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title,
-              style:
-                  const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+          Text(title, style: AppTextStyles.titleMedium),
+          const SizedBox(height: 8),
+          Text(content, style: AppTextStyles.bodyMedium),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChipSection(String title, List<String> items) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: AppTextStyles.titleMedium),
           const SizedBox(height: 12),
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: items
-                .map((item) => Chip(
-                      label: Text(item,
-                          style: TextStyle(color: color, fontSize: 13)),
-                      backgroundColor: color.withOpacity(0.1),
-                      side: BorderSide.none,
-                    ))
-                .toList(),
+            children: items.map((item) => Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.primaryLight,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                item,
+                style: AppTextStyles.labelMedium.copyWith(color: AppColors.primary),
+              ),
+            )).toList(),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildExperienceSection(
-      BuildContext context, List<DoctorExperience> experiences) {
-    return Container(
+  Widget _buildLogoutButton() {
+    return SizedBox(
       width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      margin: const EdgeInsets.only(bottom: 8),
-      color: AppColors.surface,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Experiência',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 12),
-          ...experiences.map((exp) => _buildExperienceItem(exp)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildExperienceItem(DoctorExperience exp) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: AppColors.primaryLight.withOpacity(0.3),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Icon(Icons.business,
-                color: AppColors.primary, size: 20),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(exp.role,
-                    style: const TextStyle(fontWeight: FontWeight.w600)),
-                if (exp.description != null)
-                  Text(exp.description!,
-                      style: TextStyle(color: AppColors.textSecondary)),
-                Text(
-                  exp.isCurrent
-                      ? '${exp.startDate} - Atual'
-                      : '${exp.startDate}${exp.endDate != null ? ' - ${exp.endDate}' : ''}',
-                  style: TextStyle(
-                      fontSize: 12, color: AppColors.textSecondary),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showEditProfileSheet(BuildContext context, DoctorModel doctor) {
-    final bioController = TextEditingController(text: doctor.bio ?? '');
-    final cityController = TextEditingController(text: doctor.city ?? '');
-    final stateController = TextEditingController(text: doctor.state ?? '');
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
-          left: 16,
-          right: 16,
-          top: 16,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Editar Perfil',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-            const SizedBox(height: 16),
-            TextField(
-              controller: bioController,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                  labelText: 'Bio', hintText: 'Conte sobre você...'),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  flex: 2,
-                  child: TextField(
-                    controller: cityController,
-                    decoration: const InputDecoration(labelText: 'Cidade'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    controller: stateController,
-                    decoration: const InputDecoration(labelText: 'UF'),
-                    maxLength: 2,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () {
-                ref.read(profileProvider.notifier).updateProfile({
-                  'bio': bioController.text,
-                  'city': cityController.text,
-                  'state': stateController.text,
-                });
-                Navigator.pop(context);
-              },
-              child: const Text('Salvar'),
-            ),
-            const SizedBox(height: 16),
-          ],
+      child: OutlinedButton.icon(
+        onPressed: () async {
+          await ref.read(authProvider.notifier).logout();
+          if (mounted) context.go('/login');
+        },
+        icon: const Icon(Icons.logout, size: 18),
+        label: const Text('Sair da conta'),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: AppColors.error,
+          side: const BorderSide(color: AppColors.error),
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
       ),
     );

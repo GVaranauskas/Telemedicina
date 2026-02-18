@@ -25,91 +25,136 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
     final state = ref.watch(chatListProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Mensagens')),
+      backgroundColor: AppColors.background,
       body: state.isLoading
           ? const Center(child: CircularProgressIndicator())
           : state.chats.isEmpty
-              ? const Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.chat_outlined,
-                          size: 64, color: AppColors.textSecondary),
-                      SizedBox(height: 16),
-                      Text('Nenhuma conversa ainda',
-                          style: TextStyle(color: AppColors.textSecondary)),
-                    ],
-                  ),
-                )
-              : RefreshIndicator(
-                  onRefresh: () =>
-                      ref.read(chatListProvider.notifier).loadChats(),
-                  child: ListView.builder(
-                    itemCount: state.chats.length,
-                    itemBuilder: (context, index) =>
-                        _buildChatTile(context, state.chats[index]),
-                  ),
-                ),
+              ? _buildEmptyState()
+              : _buildChatList(state),
     );
   }
 
-  Widget _buildChatTile(BuildContext context, ChatModel chat) {
-    final hasUnread = chat.unreadCount > 0;
-    return ListTile(
-      leading: CircleAvatar(
-        backgroundColor: AppColors.primaryLight,
-        backgroundImage: chat.otherUserPicUrl != null
-            ? NetworkImage(chat.otherUserPicUrl!)
-            : null,
-        child: chat.otherUserPicUrl == null
-            ? Text(
-                chat.otherUserName.isNotEmpty
-                    ? chat.otherUserName[0].toUpperCase()
-                    : 'D',
-                style: TextStyle(color: AppColors.primary),
-              )
-            : null,
-      ),
-      title: Text(
-        chat.otherUserName,
-        style: TextStyle(
-          fontWeight: hasUnread ? FontWeight.bold : FontWeight.normal,
-        ),
-      ),
-      subtitle: Text(
-        chat.lastMessage ?? '',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          color: hasUnread ? AppColors.textPrimary : AppColors.textSecondary,
-        ),
-      ),
-      trailing: Column(
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          if (chat.lastMessageAt != null)
-            Text(
-              timeago.format(chat.lastMessageAt!, locale: 'pt_BR'),
-              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+          Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              color: AppColors.primaryLight,
+              borderRadius: BorderRadius.circular(20),
             ),
-          if (hasUnread) ...[
-            const SizedBox(height: 4),
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: const BoxDecoration(
-                  color: AppColors.primary, shape: BoxShape.circle),
-              child: Text(
-                '${chat.unreadCount}',
-                style: const TextStyle(color: Colors.white, fontSize: 10),
-              ),
+            child: const Icon(
+              Icons.chat_outlined,
+              size: 40,
+              color: AppColors.primary,
             ),
-          ],
+          ),
+          const SizedBox(height: 20),
+          Text(
+            'Nenhuma conversa',
+            style: AppTextStyles.headingSmall,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Suas mensagens aparecerão aqui',
+            style: AppTextStyles.bodySmall,
+          ),
         ],
       ),
-      onTap: () => context.push('/chat/${chat.chatId}', extra: {
-        'otherUserName': chat.otherUserName,
-        'otherUserId': chat.otherUserId,
-      }),
+    );
+  }
+
+  Widget _buildChatList(dynamic state) {
+    return RefreshIndicator(
+      onRefresh: () => ref.read(chatListProvider.notifier).loadChats(),
+      child: ListView.builder(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        itemCount: state.chats.length,
+        itemBuilder: (context, index) => _buildChatTile(state.chats[index]),
+      ),
+    );
+  }
+
+  Widget _buildChatTile(ChatModel chat) {
+    final hasUnread = chat.unreadCount > 0;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        leading: Container(
+          width: 52,
+          height: 52,
+          decoration: BoxDecoration(
+            color: AppColors.primaryLight,
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Center(
+            child: Text(
+              chat.otherUserName.isNotEmpty
+                  ? chat.otherUserName[0].toUpperCase()
+                  : '?',
+              style: AppTextStyles.titleLarge.copyWith(color: AppColors.primary),
+            ),
+          ),
+        ),
+        title: Text(
+          chat.otherUserName,
+          style: AppTextStyles.titleMedium.copyWith(
+            fontWeight: hasUnread ? FontWeight.w700 : FontWeight.w600,
+          ),
+        ),
+        subtitle: Text(
+          chat.lastMessage ?? '',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: hasUnread
+              ? AppTextStyles.bodySmall.copyWith(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.w500,
+                )
+              : AppTextStyles.bodySmall,
+        ),
+        trailing: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            if (chat.lastMessageAt != null)
+              Text(
+                timeago.format(chat.lastMessageAt!, locale: 'pt_BR'),
+                style: AppTextStyles.caption,
+              ),
+            if (hasUnread) ...[
+              const SizedBox(height: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AppColors.primary,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  '${chat.unreadCount}',
+                  style: AppTextStyles.labelSmall.copyWith(
+                    color: AppColors.textInverse,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+        onTap: () => context.push('/chat/${chat.chatId}', extra: {
+          'otherUserName': chat.otherUserName,
+          'otherUserId': chat.otherUserId,
+        }),
+      ),
     );
   }
 }
