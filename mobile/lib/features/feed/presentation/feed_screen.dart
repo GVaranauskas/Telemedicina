@@ -186,12 +186,12 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
             style: AppTextStyles.bodyMedium,
           ),
           // Se tiver imagem
-          if (post.mediaUrl != null) ...[
+          if (post.mediaUrls.isNotEmpty) ...[
             const SizedBox(height: 12),
             ClipRRect(
               borderRadius: BorderRadius.circular(12),
               child: Image.network(
-                post.mediaUrl!,
+                post.mediaUrls.first,
                 fit: BoxFit.cover,
                 width: double.infinity,
                 height: 200,
@@ -204,13 +204,13 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
             children: [
               _buildActionButton(
                 Icons.favorite_outline,
-                '${post.likesCount}',
+                '${post.likeCount}',
                 onTap: () {},
               ),
               const SizedBox(width: 24),
               _buildActionButton(
                 Icons.chat_bubble_outline,
-                '${post.commentsCount}',
+                '${post.commentCount}',
                 onTap: () {},
               ),
               const SizedBox(width: 24),

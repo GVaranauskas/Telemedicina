@@ -9,6 +9,8 @@ class MainScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final location = GoRouterState.of(context).uri.toString();
+    
     return Scaffold(
       backgroundColor: AppColors.background,
       body: child,
@@ -26,39 +28,44 @@ class MainScaffold extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
                 _buildNavItem(
+                  context: context,
+                  location: location,
                   icon: Icons.home_outlined,
                   activeIcon: Icons.home,
                   label: 'Feed',
                   path: '/home',
-                  index: 0,
                 ),
                 _buildNavItem(
+                  context: context,
+                  location: location,
                   icon: Icons.people_outline,
                   activeIcon: Icons.people,
                   label: 'Rede',
                   path: '/network',
-                  index: 1,
                 ),
                 _buildNavItem(
+                  context: context,
+                  location: location,
                   icon: Icons.search_outlined,
                   activeIcon: Icons.search,
                   label: 'Buscar',
                   path: '/search',
-                  index: 2,
                 ),
                 _buildNavItem(
+                  context: context,
+                  location: location,
                   icon: Icons.work_outline,
                   activeIcon: Icons.work,
                   label: 'Vagas',
                   path: '/jobs',
-                  index: 3,
                 ),
                 _buildNavItem(
+                  context: context,
+                  location: location,
                   icon: Icons.person_outline,
                   activeIcon: Icons.person,
                   label: 'Perfil',
                   path: '/profile',
-                  index: 4,
                 ),
               ],
             ),
@@ -69,13 +76,13 @@ class MainScaffold extends StatelessWidget {
   }
 
   Widget _buildNavItem({
+    required BuildContext context,
+    required String location,
     required IconData icon,
     required IconData activeIcon,
     required String label,
     required String path,
-    required int index,
   }) {
-    final location = GoRouterState.of(context).uri.toString();
     final isActive = _isRouteActive(location, path);
 
     return GestureDetector(
