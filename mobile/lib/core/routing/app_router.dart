@@ -16,6 +16,7 @@ import '../../features/network/presentation/network_graph_screen.dart';
 import '../../features/auth/presentation/register_patient_screen.dart';
 import '../../features/appointment/presentation/doctor_search_screen.dart';
 import '../../features/appointment/presentation/my_appointments_screen.dart';
+import '../../features/appointment/presentation/patient_home_screen.dart';
 import '../../shared/widgets/main_scaffold.dart';
 import '../network/api_client.dart';
 
@@ -58,7 +59,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const RegisterPatientScreen(),
       ),
 
-      // Main app with bottom nav
+      // Main app with bottom nav (doctors)
       ShellRoute(
         navigatorKey: _shellNavigatorKey,
         builder: (context, state, child) => MainScaffold(child: child),
@@ -123,6 +124,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
 
       // Patient routes
+      GoRoute(
+        path: '/patient/home',
+        builder: (context, state) => const PatientHomeScreen(),
+      ),
       GoRoute(
         path: '/patient/search',
         builder: (context, state) => const DoctorSearchScreen(),
