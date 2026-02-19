@@ -10,9 +10,9 @@ datasource db {
 // ─── Enums ──────────────────────────────────────────────────────────────────
 
 enum UserRole {
+  PATIENT
   DOCTOR
   INSTITUTION_ADMIN
-  PATIENT
 }
 
 enum InstitutionType {
@@ -62,8 +62,8 @@ model User {
   updatedAt     DateTime  @updatedAt
 
   doctor      Doctor?
-  institution Institution?
   patient     Patient?
+  institution Institution?
 
   @@map("users")
 }
@@ -118,100 +118,14 @@ model Doctor {
   eventSpeakerAt    EventSpeaker[]
   courseEnrollments CourseEnrollment[]
   instructedCourses Course[]
-
-  // Appointments with patients
-  appointments      Appointment[]
+  workplaces     DoctorWorkplace[]
+  availabilities DoctorAvailability[]
+  appointments   Appointment[]
 
   @@unique([crm, crmState])
   @@index([city, state])
   @@index([fullName])
   @@map("doctors")
-}
-
-// ─── Patient Profile ─────────────────────────────────────────────────────────
-
-model Patient {
-  id            String    @id @default(uuid())
-  userId        String    @unique
-  fullName      String
-  cpf           String?   @unique
-  phone         String?
-  dateOfBirth   DateTime?
-  gender        String?   // M, F, O (Outro)
-  bio           String?
-  profilePicUrl String?
-  city          String?
-  state         String?   @db.VarChar(2)
-  latitude      Float?
-  longitude     Float?
-  bloodType     String?   // A+, A-, B+, B-, AB+, AB-, O+, O-
-  allergies     String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-
-  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  medicalRecords  MedicalRecord[]
-  appointments    Appointment[]
-
-  @@index([city, state])
-  @@index([fullName])
-  @@map("patients")
-}
-
-// ─── Patient Medical Records ─────────────────────────────────────────────────
-
-model MedicalRecord {
-  id              String    @id @default(uuid())
-  patientId       String
-  recordType      String    // CONSULTA, EXAME, CIRURGIA, INTERNACAO
-  title           String
-  description     String?
-  doctorName      String?
-  institutionName String?
-  recordDate      DateTime
-  attachments     String[]  // URLs dos arquivos
-  isConfidential  Boolean   @default(false)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-
-  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
-
-  @@index([patientId, recordDate])
-  @@map("medical_records")
-}
-
-// ─── Appointments ────────────────────────────────────────────────────────────
-
-model Appointment {
-  id              String            @id @default(uuid())
-  patientId       String
-  doctorId        String?
-  institutionId   String?
-  title           String
-  description     String?
-  appointmentDate DateTime
-  status          AppointmentStatus @default(SCHEDULED)
-  type            String            @default("IN_PERSON") // IN_PERSON, TELEMEDICINE
-  notes           String?
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
-
-  patient     Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  doctor      Doctor?      @relation(fields: [doctorId], references: [id])
-  institution Institution? @relation(fields: [institutionId], references: [id])
-
-  @@index([patientId, appointmentDate])
-  @@index([doctorId, appointmentDate])
-  @@map("appointments")
-}
-
-enum AppointmentStatus {
-  SCHEDULED
-  CONFIRMED
-  IN_PROGRESS
-  COMPLETED
-  CANCELLED
-  NO_SHOW
 }
 
 // ─── Specialties & Skills ───────────────────────────────────────────────────
@@ -305,6 +219,7 @@ model Institution {
   city        String
   state       String          @db.VarChar(2)
   zipCode     String?
+  profilePicUrl String?
   latitude    Float?
   longitude   Float?
   isVerified  Boolean         @default(false)
@@ -315,7 +230,6 @@ model Institution {
   jobs        Job[]
   experiences DoctorExperience[]
   events      Event[]            // organized events
-  appointments Appointment[]
 
   @@index([city, state])
   @@index([type])
@@ -951,4 +865,132 @@ model CourseEnrollment {
 
   @@unique([courseId, doctorId])
   @@map("course_enrollments")
+}
+
+// ─── Patient Profile ──────────────────────────────────────────────────────
+
+enum AppointmentType {
+  PRESENCIAL
+  TELECONSULTA
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  COMPLETED
+  CANCELLED_BY_PATIENT
+  CANCELLED_BY_DOCTOR
+  NO_SHOW
+}
+
+enum DayOfWeek {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
+
+model Patient {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  fullName    String
+  cpf         String?  @unique
+  phone       String?
+  dateOfBirth DateTime?
+  gender      String?  @db.VarChar(20)
+  street      String?
+  number      String?
+  complement  String?
+  neighborhood String?
+  city        String?
+  state       String?  @db.VarChar(2)
+  zipCode     String?
+  profilePicUrl String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  appointments Appointment[]
+
+  @@map("patients")
+}
+
+// ─── Doctor Workplace ─────────────────────────────────────────────────────
+
+model DoctorWorkplace {
+  id            String   @id @default(uuid())
+  doctorId      String
+  name          String
+  street        String?
+  number        String?
+  complement    String?
+  neighborhood  String?
+  city          String
+  state         String   @db.VarChar(2)
+  zipCode       String?
+  phone         String?
+  latitude      Float
+  longitude     Float
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  doctor        Doctor               @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  availabilities DoctorAvailability[]
+  appointments  Appointment[]
+
+  @@index([doctorId])
+  @@map("doctor_workplaces")
+}
+
+model DoctorAvailability {
+  id          String      @id @default(uuid())
+  doctorId    String
+  workplaceId String
+  dayOfWeek   DayOfWeek
+  startTime   String      // HH:MM format
+  endTime     String      // HH:MM format
+  slotDurationMin Int         @default(30)
+  isActive    Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  doctor    Doctor          @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  workplace DoctorWorkplace @relation(fields: [workplaceId], references: [id], onDelete: Cascade)
+
+  @@unique([doctorId, workplaceId, dayOfWeek, startTime])
+  @@map("doctor_availabilities")
+}
+
+// ─── Appointments ─────────────────────────────────────────────────────────
+
+model Appointment {
+  id          String            @id @default(uuid())
+  patientId   String
+  doctorId    String
+  workplaceId String
+  scheduledAt DateTime
+  durationMin Int               @default(30)
+  type        AppointmentType   @default(PRESENCIAL)
+  status      AppointmentStatus @default(PENDING)
+  reason      String?
+  notes       String?
+  cancelledAt DateTime?
+  cancelReason String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  patient   Patient         @relation(fields: [patientId], references: [id])
+  doctor    Doctor          @relation(fields: [doctorId], references: [id])
+  workplace DoctorWorkplace @relation(fields: [workplaceId], references: [id])
+
+  @@index([patientId])
+  @@index([doctorId])
+  @@index([workplaceId])
+  @@index([scheduledAt])
+  @@index([status])
+  @@map("appointments")
 }

@@ -11,4 +11,7 @@ export const EVENTS = {
   POST_CREATED: 'post.created',
   POST_LIKED: 'post.liked',
   POST_COMMENTED: 'post.commented',
+  APPOINTMENT_CREATED: 'appointment.created',
+  APPOINTMENT_CANCELLED: 'appointment.cancelled',
+  WORKPLACE_CREATED: 'workplace.created',
 };
