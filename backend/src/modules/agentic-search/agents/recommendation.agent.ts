@@ -58,6 +58,7 @@ export class RecommendationAgent {
 
   private async generateInsights(doctorId: string, graphData: any) {
     const llm = this.llmFactory.getAdapter();
+    if (!llm) return null;
 
     // Get doctor profile
     const doctor = await this.prisma.doctor.findUnique({

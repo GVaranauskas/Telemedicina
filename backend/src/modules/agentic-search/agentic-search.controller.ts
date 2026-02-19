@@ -1,15 +1,13 @@
 import { Controller, Post, Get, Body, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import { IsString } from 'class-validator';
+import { IsString, MaxLength } from 'class-validator';
 import { AgenticSearchService } from './agentic-search.service';
-import { CollaborationAgent } from './agents/collaboration.agent';
-import { CareerAgent } from './agents/career.agent';
-import { EventAgent } from './agents/event.agent';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
 class SearchQueryDto {
   @IsString()
+  @MaxLength(500)
   query: string;
 }
 
@@ -20,9 +18,6 @@ class SearchQueryDto {
 export class AgenticSearchController {
   constructor(
     private readonly agenticSearchService: AgenticSearchService,
-    private readonly collaborationAgent: CollaborationAgent,
-    private readonly careerAgent: CareerAgent,
-    private readonly eventAgent: EventAgent,
   ) {}
 
   @Post('query')
@@ -55,7 +50,7 @@ export class AgenticSearchController {
       'Returns opportunities for scientific collaboration: co-authors, study groups, research projects, and case studies.',
   })
   async getCollaborationSuggestions(@CurrentUser('doctorId') doctorId: string) {
-    return this.collaborationAgent.getCollaborationSuggestions(doctorId);
+    return this.agenticSearchService.getCollaborationSuggestions(doctorId);
   }
 
   @Get('career')
@@ -65,7 +60,7 @@ export class AgenticSearchController {
       'Returns career path progress, certification recommendations, mentorship opportunities, and relevant courses.',
   })
   async getCareerSuggestions(@CurrentUser('doctorId') doctorId: string) {
-    return this.careerAgent.getCareerSuggestions(doctorId);
+    return this.agenticSearchService.getCareerSuggestions(doctorId);
   }
 
   @Get('events')
@@ -75,7 +70,7 @@ export class AgenticSearchController {
       'Returns upcoming events, speaking opportunities, course recommendations, and learning paths.',
   })
   async getEventSuggestions(@CurrentUser('doctorId') doctorId: string) {
-    return this.eventAgent.getEventSuggestions(doctorId);
+    return this.agenticSearchService.getEventSuggestions(doctorId);
   }
 
   @Get('dashboard')
@@ -85,18 +80,6 @@ export class AgenticSearchController {
       'Returns all agent suggestions combined: recommendations, collaboration, career, and events.',
   })
   async getDashboard(@CurrentUser('doctorId') doctorId: string) {
-    const [recommendations, collaboration, career, events] = await Promise.all([
-      this.agenticSearchService.getRecommendations(doctorId),
-      this.collaborationAgent.getCollaborationSuggestions(doctorId),
-      this.careerAgent.getCareerSuggestions(doctorId),
-      this.eventAgent.getEventSuggestions(doctorId),
-    ]);
-
-    return {
-      recommendations,
-      collaboration,
-      career,
-      events,
-    };
+    return this.agenticSearchService.getDashboard(doctorId);
   }
 }
