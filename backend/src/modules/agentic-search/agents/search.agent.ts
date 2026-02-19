@@ -23,7 +23,6 @@ export class SearchAgent {
     query: string,
     doctorContext?: { doctorId: string; fullName: string },
   ): Promise<{ answer: string; sources: any[] }> {
-    const llm = this.llmFactory.getAdapter();
     const sources: any[] = [];
 
     const messages: LLMMessage[] = [
@@ -41,10 +40,10 @@ export class SearchAgent {
       },
     ];
 
-    // Agent loop
+    // Agent loop — uses chatWithFallback for automatic provider failover
     for (let i = 0; i < MAX_ITERATIONS; i++) {
       this.logger.log(`Agent iteration ${i + 1}/${MAX_ITERATIONS}`);
-      const response = await llm.chat(messages, ALL_SEARCH_TOOLS);
+      const response = await this.llmFactory.chatWithFallback(messages, ALL_SEARCH_TOOLS);
 
       if (response.toolCalls.length === 0) {
         // Agent is done, return the final answer
@@ -208,8 +207,14 @@ export class SearchAgent {
   }
 
   private async executeCypher(query: string, params: Record<string, any>) {
-    // Security: only allow read queries (case-insensitive word boundary check)
-    const normalized = query.trim();
+    // Security: strip comments that could hide dangerous keywords
+    const stripped = query
+      .replace(/\/\*[\s\S]*?\*\//g, '') // Remove block comments
+      .replace(/\/\/.*/g, '')            // Remove line comments
+      .trim();
+
+    // Tokenize: only allow MATCH, OPTIONAL MATCH, WHERE, WITH, RETURN, ORDER BY,
+    // LIMIT, SKIP, UNWIND, UNION, CASE, COLLECT, COUNT, EXISTS, shortestPath, allShortestPaths
     const dangerousPatterns = [
       /\bDELETE\b/i,
       /\bCREATE\b/i,
@@ -220,13 +225,28 @@ export class SearchAgent {
       /\bDETACH\b/i,
       /\bCALL\b/i,
       /\bFOREACH\b/i,
+      /\bLOAD\b/i,
+      /\bPERIODIC\b/i,
     ];
-    if (dangerousPatterns.some((pattern) => pattern.test(normalized))) {
-      return { error: 'Only read queries are allowed' };
+    if (dangerousPatterns.some((pattern) => pattern.test(stripped))) {
+      return { error: 'Only read queries (MATCH/RETURN) are allowed' };
     }
 
-    const results = await this.neo4j.read(query, params);
-    // Convert Neo4j Integer objects to plain numbers
+    // Must start with MATCH or OPTIONAL or UNWIND or WITH or RETURN
+    if (!/^\s*(MATCH|OPTIONAL|UNWIND|WITH|RETURN)\b/i.test(stripped)) {
+      return { error: 'Query must start with MATCH, OPTIONAL MATCH, UNWIND, WITH, or RETURN' };
+    }
+
+    // Must contain RETURN
+    if (!/\bRETURN\b/i.test(stripped)) {
+      return { error: 'Query must contain a RETURN clause' };
+    }
+
+    // Enforce LIMIT to prevent full graph scans
+    const hasLimit = /\bLIMIT\b/i.test(stripped);
+    const queryWithLimit = hasLimit ? stripped : `${stripped} LIMIT 50`;
+
+    const results = await this.neo4j.read(queryWithLimit, params);
     return results.slice(0, 50).map((r: any) => {
       const cleaned: any = {};
       for (const [key, value] of Object.entries(r)) {
