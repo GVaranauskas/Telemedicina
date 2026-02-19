@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { OnEvent } from '@nestjs/event-emitter';
 import { PrismaService } from '../../database/prisma/prisma.service';
 import { Neo4jService } from '../../database/neo4j/neo4j.service';
 import { RedisService } from '../../database/redis/redis.service';
@@ -8,6 +9,7 @@ import { RecommendationAgent } from './agents/recommendation.agent';
 import { CollaborationAgent } from './agents/collaboration.agent';
 import { CareerAgent } from './agents/career.agent';
 import { EventAgent } from './agents/event.agent';
+import { EVENTS } from '../../events/events.constants';
 import * as crypto from 'crypto';
 
 // Cache TTL in seconds
@@ -25,6 +27,7 @@ export class AgenticSearchService {
   private readonly logger = new Logger(AgenticSearchService.name);
   private readonly hasLLM: boolean;
   private cachedSpecialties: { data: any[]; expiresAt: number } | null = null;
+  private inMemoryRateLimit = new Map<string, { count: number; resetAt: number }>();
 
   constructor(
     private readonly searchAgent: SearchAgent,
@@ -186,7 +189,7 @@ export class AgenticSearchService {
       .slice(0, 500);
   }
 
-  // ─── Rate Limiting ────────────────────────────────────────────────────
+  // ─── Rate Limiting (Redis primary, in-memory fallback) ───────────────
   private async checkRateLimit(doctorId: string): Promise<void> {
     const key = `ratelimit:agentic:${doctorId}`;
     try {
@@ -206,9 +209,35 @@ export class AgenticSearchService {
       if (error instanceof Error && error.message.includes('Rate limit')) {
         throw error;
       }
-      // If Redis fails, allow the request (fail open for availability)
-      this.logger.warn('Rate limit check failed, allowing request', error);
+      // Redis unavailable — fall back to in-memory rate limiting
+      this.logger.warn('Redis unavailable for rate limiting, using in-memory fallback');
+      this.checkRateLimitInMemory(doctorId);
     }
+  }
+
+  private checkRateLimitInMemory(doctorId: string): void {
+    const now = Date.now();
+    const entry = this.inMemoryRateLimit.get(doctorId);
+
+    if (!entry || now > entry.resetAt) {
+      this.inMemoryRateLimit.set(doctorId, {
+        count: 1,
+        resetAt: now + RATE_LIMIT_WINDOW * 1000,
+      });
+      // Periodic cleanup: remove stale entries when map grows too large
+      if (this.inMemoryRateLimit.size > 1000) {
+        for (const [key, val] of this.inMemoryRateLimit) {
+          if (now > val.resetAt) this.inMemoryRateLimit.delete(key);
+        }
+      }
+      return;
+    }
+
+    if (entry.count >= RATE_LIMIT_MAX_QUERIES) {
+      throw new Error('Rate limit exceeded. Please wait before making more queries.');
+    }
+
+    entry.count++;
   }
 
   // ─── Smart Routing: bypass LLM for simple queries ───────────────────
@@ -427,6 +456,77 @@ export class AgenticSearchService {
     return `agentic:${prefix}:${doctorId}:${hash}`;
   }
 
+  // ─── Event-driven cache invalidation ──────────────────────────────────
+
+  async invalidateCacheForDoctor(doctorId: string): Promise<void> {
+    const keys = [
+      `agentic:recommendations:${doctorId}`,
+      `agentic:collaboration:${doctorId}`,
+      `agentic:career:${doctorId}`,
+      `agentic:events:${doctorId}`,
+    ];
+    try {
+      await Promise.all(keys.map((k) => this.redis.del(k)));
+      this.logger.debug(`Cache invalidated for doctor ${doctorId}`);
+    } catch (e) {
+      this.logger.warn(`Failed to invalidate cache for doctor ${doctorId}`, e?.message);
+    }
+  }
+
+  @OnEvent(EVENTS.DOCTOR_UPDATED)
+  async onDoctorUpdated(payload: { id: string }) {
+    await this.invalidateCacheForDoctor(payload.id);
+  }
+
+  @OnEvent(EVENTS.CONNECTION_CREATED)
+  async onConnectionCreated(payload: { doctorId: string; targetDoctorId: string }) {
+    await Promise.all([
+      this.invalidateCacheForDoctor(payload.doctorId),
+      this.invalidateCacheForDoctor(payload.targetDoctorId),
+    ]);
+  }
+
+  @OnEvent(EVENTS.CONNECTION_REMOVED)
+  async onConnectionRemoved(payload: { doctorId: string; targetDoctorId: string }) {
+    await Promise.all([
+      this.invalidateCacheForDoctor(payload.doctorId),
+      this.invalidateCacheForDoctor(payload.targetDoctorId),
+    ]);
+  }
+
+  @OnEvent(EVENTS.SPECIALTY_ADDED)
+  @OnEvent(EVENTS.SPECIALTY_REMOVED)
+  @OnEvent(EVENTS.SKILL_ADDED)
+  @OnEvent(EVENTS.SKILL_REMOVED)
+  async onDoctorProfileChanged(payload: { doctorId: string }) {
+    await this.invalidateCacheForDoctor(payload.doctorId);
+    // Also invalidate specialty cache so new searches reflect changes
+    this.cachedSpecialties = null;
+  }
+
+  @OnEvent(EVENTS.JOB_CREATED)
+  @OnEvent(EVENTS.JOB_DEACTIVATED)
+  async onJobChanged() {
+    // Job changes affect all doctor search caches — clear specialty cache
+    // Individual doctor caches will expire via TTL (no full flush needed)
+    this.cachedSpecialties = null;
+  }
+
+  @OnEvent(EVENTS.CERTIFICATION_AWARDED)
+  @OnEvent(EVENTS.MENTORSHIP_CREATED)
+  @OnEvent(EVENTS.MENTORSHIP_ENDED)
+  async onCareerChanged(payload: { doctorId: string }) {
+    await this.invalidateCacheForDoctor(payload.doctorId);
+  }
+
+  @OnEvent(EVENTS.PUBLICATION_CREATED)
+  @OnEvent(EVENTS.CASE_STUDY_CREATED)
+  @OnEvent(EVENTS.STUDY_GROUP_MEMBER_ADDED)
+  @OnEvent(EVENTS.RESEARCH_PROJECT_MEMBER_ADDED)
+  async onCollaborationChanged(payload: { doctorId: string }) {
+    await this.invalidateCacheForDoctor(payload.doctorId);
+  }
+
   private async queryWithLLM(doctorId: string, queryText: string) {
     const doctor = await this.prisma.doctor.findUnique({
       where: { id: doctorId },
@@ -437,7 +537,27 @@ export class AgenticSearchService {
       ? { doctorId: doctor.id, fullName: doctor.fullName }
       : undefined;
 
-    const result = await this.searchAgent.processQuery(queryText, context);
+    let result: { answer: string; sources: any[] };
+    try {
+      result = await this.searchAgent.processQuery(queryText, context);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+
+      // All LLM providers failed or none configured — graceful degradation
+      if (msg.includes('No LLM providers') || msg.includes('LLM providers failed')) {
+        this.logger.warn(`LLM unavailable: ${msg}. Falling back to direct search.`);
+        return {
+          query: queryText,
+          answer: 'A busca inteligente está temporariamente indisponível. '
+            + 'Mostrando resultados da busca direta no banco de dados.',
+          results: [],
+          toolsUsed: [],
+          llmUnavailable: true,
+          fallback: await this.queryWithFallback(doctorId, queryText),
+        };
+      }
+      throw error;
+    }
 
     const structuredResults: any[] = [];
     for (const source of result.sources || []) {

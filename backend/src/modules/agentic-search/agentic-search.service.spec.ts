@@ -136,9 +136,40 @@ describe('AgenticSearchService', () => {
       await expect(checkRateLimit('doctor-1')).rejects.toThrow('Rate limit exceeded');
     });
 
-    it('should fail open when Redis is down', async () => {
+    it('should use in-memory fallback when Redis is down', async () => {
       mockRedis.get.mockRejectedValueOnce(new Error('Redis connection lost'));
+      // First call: Redis fails, in-memory allows (count=1)
       await expect(checkRateLimit('doctor-1')).resolves.toBeUndefined();
+    });
+
+    it('should enforce rate limit via in-memory fallback when Redis stays down', async () => {
+      // Simulate Redis being completely down
+      mockRedis.get.mockRejectedValue(new Error('Redis connection lost'));
+
+      // Exhaust rate limit via in-memory fallback (20 calls)
+      for (let i = 0; i < 20; i++) {
+        await checkRateLimit('doctor-in-mem');
+      }
+
+      // 21st call should be blocked by in-memory limiter
+      await expect(checkRateLimit('doctor-in-mem')).rejects.toThrow('Rate limit exceeded');
+    });
+
+    it('should reset in-memory counter after window expires', async () => {
+      mockRedis.get.mockRejectedValue(new Error('Redis down'));
+
+      // Fill up the in-memory limit
+      for (let i = 0; i < 19; i++) {
+        await checkRateLimit('doctor-reset');
+      }
+
+      // Manually expire the in-memory entry
+      const rateLimitMap = (service as any).inMemoryRateLimit;
+      const entry = rateLimitMap.get('doctor-reset');
+      if (entry) entry.resetAt = Date.now() - 1; // expired
+
+      // Should allow again (reset)
+      await expect(checkRateLimit('doctor-reset')).resolves.toBeUndefined();
     });
 
     it('should isolate rate limits per doctor', async () => {
@@ -370,6 +401,124 @@ describe('AgenticSearchService', () => {
       expect(result).not.toBeNull();
       expect(result.routed).toBe('direct');
       expect(result.toolsUsed).toContain('search_jobs');
+    });
+  });
+
+  // ─── Cache invalidation (event-driven) ──────────────────────────────────
+
+  describe('invalidateCacheForDoctor', () => {
+    it('should delete all cache keys for a doctor', async () => {
+      await service.invalidateCacheForDoctor('doc-1');
+
+      expect(mockRedis.del).toHaveBeenCalledWith('agentic:recommendations:doc-1');
+      expect(mockRedis.del).toHaveBeenCalledWith('agentic:collaboration:doc-1');
+      expect(mockRedis.del).toHaveBeenCalledWith('agentic:career:doc-1');
+      expect(mockRedis.del).toHaveBeenCalledWith('agentic:events:doc-1');
+      expect(mockRedis.del).toHaveBeenCalledTimes(4);
+    });
+
+    it('should not throw when Redis fails during invalidation', async () => {
+      mockRedis.del.mockRejectedValue(new Error('Redis down'));
+      await expect(service.invalidateCacheForDoctor('doc-1')).resolves.toBeUndefined();
+    });
+  });
+
+  describe('event-driven cache invalidation', () => {
+    it('should invalidate cache on doctor.updated event', async () => {
+      await (service as any).onDoctorUpdated({ id: 'doc-1' });
+      expect(mockRedis.del).toHaveBeenCalledWith('agentic:recommendations:doc-1');
+    });
+
+    it('should invalidate both doctors on connection.created event', async () => {
+      await (service as any).onConnectionCreated({
+        doctorId: 'doc-1',
+        targetDoctorId: 'doc-2',
+      });
+
+      // doc-1 cache keys
+      expect(mockRedis.del).toHaveBeenCalledWith('agentic:recommendations:doc-1');
+      // doc-2 cache keys
+      expect(mockRedis.del).toHaveBeenCalledWith('agentic:recommendations:doc-2');
+      // Total: 4 keys per doctor × 2 doctors = 8 calls
+      expect(mockRedis.del).toHaveBeenCalledTimes(8);
+    });
+
+    it('should invalidate cache on specialty change', async () => {
+      await (service as any).onDoctorProfileChanged({ doctorId: 'doc-1' });
+      expect(mockRedis.del).toHaveBeenCalledWith('agentic:recommendations:doc-1');
+      // Should also clear specialty cache
+      expect((service as any).cachedSpecialties).toBeNull();
+    });
+
+    it('should invalidate cache on career events', async () => {
+      await (service as any).onCareerChanged({ doctorId: 'doc-1' });
+      expect(mockRedis.del).toHaveBeenCalledWith('agentic:career:doc-1');
+    });
+
+    it('should invalidate cache on collaboration events', async () => {
+      await (service as any).onCollaborationChanged({ doctorId: 'doc-1' });
+      expect(mockRedis.del).toHaveBeenCalledWith('agentic:collaboration:doc-1');
+    });
+  });
+
+  // ─── LLM graceful degradation ──────────────────────────────────────────
+
+  describe('queryWithLLM — graceful degradation', () => {
+    // Use a query that bypasses smart routing (no specialty/city/job match)
+    const llmQuery = 'buscar dados gerais';
+
+    beforeEach(() => {
+      // Ensure no specialty matches → forces LLM path
+      mockPrisma.specialty.findMany.mockReset();
+      mockPrisma.specialty.findMany.mockResolvedValue([]);
+      // Reset in-memory specialty cache
+      (service as any).cachedSpecialties = null;
+    });
+
+    it('should fall back to direct search when LLM throws "No LLM providers"', async () => {
+      mockRedis.getJson.mockResolvedValueOnce(null); // cache miss
+      mockSearchAgent.processQuery.mockRejectedValueOnce(
+        new Error('No LLM providers configured'),
+      );
+      mockPrisma.doctor.findUnique.mockResolvedValueOnce({
+        id: 'doc-1',
+        fullName: 'Dr. Test',
+      });
+
+      const result = await service.query('doc-1', llmQuery);
+      expect(result.llmUnavailable).toBe(true);
+      expect(result.answer).toContain('temporariamente indisponível');
+      expect(result.fallback).toBeDefined();
+    });
+
+    it('should fall back to direct search when all LLM providers fail', async () => {
+      mockRedis.getJson.mockResolvedValueOnce(null);
+      mockSearchAgent.processQuery.mockRejectedValueOnce(
+        new Error('All LLM providers failed'),
+      );
+      mockPrisma.doctor.findUnique.mockResolvedValueOnce({
+        id: 'doc-1',
+        fullName: 'Dr. Test',
+      });
+
+      const result = await service.query('doc-1', llmQuery);
+      expect(result.llmUnavailable).toBe(true);
+      expect(result.fallback).toBeDefined();
+    });
+
+    it('should re-throw non-LLM errors', async () => {
+      mockRedis.getJson.mockResolvedValueOnce(null);
+      mockSearchAgent.processQuery.mockRejectedValueOnce(
+        new Error('Database connection failed'),
+      );
+      mockPrisma.doctor.findUnique.mockResolvedValueOnce({
+        id: 'doc-1',
+        fullName: 'Dr. Test',
+      });
+
+      await expect(
+        service.query('doc-1', llmQuery),
+      ).rejects.toThrow('Database connection failed');
     });
   });
 });
