@@ -25,8 +25,13 @@ services:
     restart: unless-stopped
     environment:
       NEO4J_AUTH: neo4j/medconnect_dev_2026
-      NEO4J_PLUGINS: '["apoc"]'
-      NEO4J_dbms_security_procedures_unrestricted: apoc.*
+      NEO4J_PLUGINS: '["apoc", "graph-data-science"]'
+      NEO4J_dbms_security_procedures_unrestricted: apoc.*,gds.*
+      NEO4J_dbms_security_procedures_allowlist: apoc.*,gds.*
+      # Memory tuning
+      NEO4J_server_memory_heap_initial__size: 256m
+      NEO4J_server_memory_heap_max__size: 512m
+      NEO4J_server_memory_pagecache_size: 256m
     ports:
       - '7474:7474'   # Browser
       - '7687:7687'   # Bolt
@@ -34,10 +39,11 @@ services:
       - neo4j_data:/data
       - neo4j_logs:/logs
     healthcheck:
-      test: ['CMD', 'neo4j', 'status']
+      test: ['CMD-SHELL', 'wget --no-verbose --tries=1 --spider http://localhost:7474 || exit 1']
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 15s
 
   scylladb:
     image: scylladb/scylla:5.4

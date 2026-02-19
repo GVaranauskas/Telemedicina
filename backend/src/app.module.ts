@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { EventEmitterModule } from '@nestjs/event-emitter';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule } from '@nestjs/throttler';
 
 import databaseConfig from './config/database.config';
@@ -35,6 +36,9 @@ import { EventsModule } from './events/events.module';
 
     // Event Emitter for cross-db sync
     EventEmitterModule.forRoot(),
+
+    // Scheduled tasks (GDS algorithms, cache warmup)
+    ScheduleModule.forRoot(),
 
     // Rate Limiting
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),

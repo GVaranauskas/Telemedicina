@@ -1,24 +1,40 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { OnEvent } from '@nestjs/event-emitter';
 import { PrismaService } from '../../database/prisma/prisma.service';
 import { Neo4jService } from '../../database/neo4j/neo4j.service';
 import { RedisService } from '../../database/redis/redis.service';
 import { SearchAgent } from './agents/search.agent';
 import { RecommendationAgent } from './agents/recommendation.agent';
+import { CollaborationAgent } from './agents/collaboration.agent';
+import { CareerAgent } from './agents/career.agent';
+import { EventAgent } from './agents/event.agent';
+import { EVENTS } from '../../events/events.constants';
 import * as crypto from 'crypto';
 
 // Cache TTL in seconds
-const QUERY_CACHE_TTL = 600; // 10 minutes
-const RECOMMENDATION_CACHE_TTL = 300; // 5 minutes
+const QUERY_CACHE_TTL = 600;           // 10 minutes
+const RECOMMENDATION_CACHE_TTL = 300;  // 5 minutes
+const AGENT_CACHE_TTL = 300;           // 5 minutes for collaboration/career/events
+const SPECIALTY_CACHE_TTL = 3600;      // 1 hour for specialty list
+
+// Rate limiting
+const RATE_LIMIT_WINDOW = 60;          // 1 minute window
+const RATE_LIMIT_MAX_QUERIES = 20;     // max queries per minute
 
 @Injectable()
 export class AgenticSearchService {
   private readonly logger = new Logger(AgenticSearchService.name);
   private readonly hasLLM: boolean;
+  private cachedSpecialties: { data: any[]; expiresAt: number } | null = null;
+  private inMemoryRateLimit = new Map<string, { count: number; resetAt: number }>();
 
   constructor(
     private readonly searchAgent: SearchAgent,
     private readonly recommendationAgent: RecommendationAgent,
+    private readonly collaborationAgent: CollaborationAgent,
+    private readonly careerAgent: CareerAgent,
+    private readonly eventAgent: EventAgent,
     private readonly prisma: PrismaService,
     private readonly neo4j: Neo4jService,
     private readonly redis: RedisService,
@@ -34,30 +50,35 @@ export class AgenticSearchService {
   }
 
   async query(doctorId: string, queryText: string) {
+    // Rate limit check
+    await this.checkRateLimit(doctorId);
+
+    // Sanitize input
+    const sanitizedQuery = this.sanitizeInput(queryText);
+
     this.logger.log(
-      `Agentic search: "${queryText}" by doctor ${doctorId}`,
+      `Agentic search: "${sanitizedQuery}" by doctor ${doctorId}`,
     );
 
     // ─── Strategy 1: Redis response cache ─────────────────────────────
-    const cacheKey = this.buildCacheKey('search', doctorId, queryText);
+    const cacheKey = this.buildCacheKey('search', doctorId, sanitizedQuery);
     const cached = await this.redis.getJson<any>(cacheKey);
     if (cached) {
-      this.logger.log(`Cache HIT for query: "${queryText}"`);
+      this.logger.log(`Cache HIT for query: "${sanitizedQuery}"`);
       return { ...cached, cached: true };
     }
 
     let result: any;
 
     if (!this.hasLLM) {
-      result = await this.queryWithFallback(doctorId, queryText);
+      result = await this.queryWithFallback(doctorId, sanitizedQuery);
     } else {
       // ─── Strategy 2: Smart routing ────────────────────────────────
-      // Simple pattern-based queries go direct to Neo4j/Prisma (no LLM cost)
-      const directResult = await this.tryDirectQuery(doctorId, queryText);
+      const directResult = await this.tryDirectQuery(doctorId, sanitizedQuery);
       if (directResult) {
         result = directResult;
       } else {
-        result = await this.queryWithLLM(doctorId, queryText);
+        result = await this.queryWithLLM(doctorId, sanitizedQuery);
       }
     }
 
@@ -71,40 +92,179 @@ export class AgenticSearchService {
     return result;
   }
 
+  async getRecommendations(doctorId: string) {
+    const cacheKey = `agentic:recommendations:${doctorId}`;
+    const cached = await this.redis.getJson<any>(cacheKey);
+    if (cached) {
+      this.logger.log(`Recommendations cache HIT for doctor ${doctorId}`);
+      return { ...cached, cached: true };
+    }
+
+    const result = await this.recommendationAgent.getRecommendations(doctorId);
+
+    try {
+      await this.redis.setJson(cacheKey, result, RECOMMENDATION_CACHE_TTL);
+    } catch (e) {
+      this.logger.warn('Failed to cache recommendations', e?.message);
+    }
+
+    return result;
+  }
+
+  async getCollaborationSuggestions(doctorId: string) {
+    const cacheKey = `agentic:collaboration:${doctorId}`;
+    const cached = await this.redis.getJson<any>(cacheKey);
+    if (cached) {
+      return { ...cached, cached: true };
+    }
+
+    const result = await this.collaborationAgent.getCollaborationSuggestions(doctorId);
+
+    try {
+      await this.redis.setJson(cacheKey, result, AGENT_CACHE_TTL);
+    } catch (e) {
+      this.logger.warn('Failed to cache collaboration suggestions', e?.message);
+    }
+
+    return result;
+  }
+
+  async getCareerSuggestions(doctorId: string) {
+    const cacheKey = `agentic:career:${doctorId}`;
+    const cached = await this.redis.getJson<any>(cacheKey);
+    if (cached) {
+      return { ...cached, cached: true };
+    }
+
+    const result = await this.careerAgent.getCareerSuggestions(doctorId);
+
+    try {
+      await this.redis.setJson(cacheKey, result, AGENT_CACHE_TTL);
+    } catch (e) {
+      this.logger.warn('Failed to cache career suggestions', e?.message);
+    }
+
+    return result;
+  }
+
+  async getEventSuggestions(doctorId: string) {
+    const cacheKey = `agentic:events:${doctorId}`;
+    const cached = await this.redis.getJson<any>(cacheKey);
+    if (cached) {
+      return { ...cached, cached: true };
+    }
+
+    const result = await this.eventAgent.getEventSuggestions(doctorId);
+
+    try {
+      await this.redis.setJson(cacheKey, result, AGENT_CACHE_TTL);
+    } catch (e) {
+      this.logger.warn('Failed to cache event suggestions', e?.message);
+    }
+
+    return result;
+  }
+
+  async getDashboard(doctorId: string) {
+    const [recommendations, collaboration, career, events] = await Promise.all([
+      this.getRecommendations(doctorId),
+      this.getCollaborationSuggestions(doctorId),
+      this.getCareerSuggestions(doctorId),
+      this.getEventSuggestions(doctorId),
+    ]);
+
+    return { recommendations, collaboration, career, events };
+  }
+
+  // ─── Input Sanitization ───────────────────────────────────────────────
+  private sanitizeInput(input: string): string {
+    return input
+      // Remove control characters
+      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+      // Trim whitespace
+      .trim()
+      // Collapse multiple spaces
+      .replace(/\s+/g, ' ')
+      // Limit length (defense in depth, DTO also validates)
+      .slice(0, 500);
+  }
+
+  // ─── Rate Limiting (Redis primary, in-memory fallback) ───────────────
+  private async checkRateLimit(doctorId: string): Promise<void> {
+    const key = `ratelimit:agentic:${doctorId}`;
+    try {
+      const current = await this.redis.get(key);
+      const count = current ? parseInt(current, 10) : 0;
+
+      if (count >= RATE_LIMIT_MAX_QUERIES) {
+        throw new Error('Rate limit exceeded. Please wait before making more queries.');
+      }
+
+      if (count === 0) {
+        await this.redis.set(key, '1', RATE_LIMIT_WINDOW);
+      } else {
+        await this.redis.incr(key);
+      }
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('Rate limit')) {
+        throw error;
+      }
+      // Redis unavailable — fall back to in-memory rate limiting
+      this.logger.warn('Redis unavailable for rate limiting, using in-memory fallback');
+      this.checkRateLimitInMemory(doctorId);
+    }
+  }
+
+  private checkRateLimitInMemory(doctorId: string): void {
+    const now = Date.now();
+    const entry = this.inMemoryRateLimit.get(doctorId);
+
+    if (!entry || now > entry.resetAt) {
+      this.inMemoryRateLimit.set(doctorId, {
+        count: 1,
+        resetAt: now + RATE_LIMIT_WINDOW * 1000,
+      });
+      // Periodic cleanup: remove stale entries when map grows too large
+      if (this.inMemoryRateLimit.size > 1000) {
+        for (const [key, val] of this.inMemoryRateLimit) {
+          if (now > val.resetAt) this.inMemoryRateLimit.delete(key);
+        }
+      }
+      return;
+    }
+
+    if (entry.count >= RATE_LIMIT_MAX_QUERIES) {
+      throw new Error('Rate limit exceeded. Please wait before making more queries.');
+    }
+
+    entry.count++;
+  }
+
   // ─── Smart Routing: bypass LLM for simple queries ───────────────────
-  // Returns null if the query is too complex for direct handling.
   private async tryDirectQuery(doctorId: string, queryText: string): Promise<any | null> {
     const q = queryText.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
-    // Detect query complexity markers that need LLM reasoning
     const complexMarkers = [
       'como', 'por que', 'porque', 'explique', 'analise', 'compare',
       'caminho', 'path', 'em comum', 'quem na minha', 'minha rede',
       'mais conectado', 'mais endossado', 'top', 'ranking',
       'recomend', 'sugir', 'sugeri',
-      // Career & Mentorship markers
       'mentor', 'mentoria', 'carreira', 'trajetoria', 'certificacao',
       'certificado', 'progresso', 'milestone', 'marco',
-      // Events & Courses markers
       'evento', 'congresso', 'simposio', 'workshop', 'webinar', 'palestra',
       'curso', 'treinamento', 'capacitacao', 'trilha', 'aprendizado',
     ];
     if (complexMarkers.some((m) => q.includes(m))) {
-      return null; // Too complex, use LLM
+      return null;
     }
 
-    // Simple specialty + city queries
     const matchedSpec = await this.matchSpecialty(q);
-    const matchedCity = this.matchCity(q);
+    const matchedCity = await this.matchCity(q);
 
-    // Is it a job search?
     const isJob = /vaga|vagas|plantao|plantoes|emprego/.test(q);
-    // Is it an institution search?
     const isInst = /hospital|hospitais|clinica|clinicas|instituicao|ubs|upa/.test(q);
-    // Is it a skill search?
     const isSkill = /sabe|faz|procedimento|habilidade|skill/.test(q);
 
-    // Only handle clear single-dimension queries
     if (isJob && (matchedSpec || matchedCity)) {
       return this.directJobSearch(matchedSpec, matchedCity, q);
     }
@@ -118,7 +278,7 @@ export class AgenticSearchService {
       return this.directDoctorSearch(doctorId, matchedSpec, null);
     }
 
-    return null; // Not a simple query, use LLM
+    return null;
   }
 
   private async directJobSearch(spec: any, city: any, q: string) {
@@ -147,7 +307,7 @@ export class AgenticSearchService {
       answer: `Encontrei ${jobs.length} vaga(s)${city ? ` em ${city.city}` : ''}${spec ? ` na área de ${spec.name}` : ''}. ${jobs.length > 0 ? `Destaque para "${jobs[0].title}".` : 'Nenhuma vaga encontrada.'}`,
       results,
       toolsUsed: ['search_jobs'],
-      routed: 'direct', // Indicates this bypassed LLM
+      routed: 'direct',
     };
   }
 
@@ -204,10 +364,10 @@ export class AgenticSearchService {
     };
   }
 
-  // ─── Helper: match specialty from query ─────────────────────────────
+  // ─── Helper: match specialty from query (cached) ──────────────────────
   private async matchSpecialty(q: string) {
-    const allSpecialties = await this.prisma.specialty.findMany();
-    return allSpecialties.find((s) => {
+    const specialties = await this.getCachedSpecialties();
+    return specialties.find((s) => {
       const specNorm = s.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
       const firstWord = specNorm.split(' ')[0];
       if (q.includes(specNorm) || q.includes(firstWord)) return true;
@@ -218,9 +378,22 @@ export class AgenticSearchService {
     }) || null;
   }
 
-  // ─── Helper: match city from query ──────────────────────────────────
-  private matchCity(q: string) {
-    const cityPatterns = [
+  private async getCachedSpecialties() {
+    if (this.cachedSpecialties && Date.now() < this.cachedSpecialties.expiresAt) {
+      return this.cachedSpecialties.data;
+    }
+    const specialties = await this.prisma.specialty.findMany();
+    this.cachedSpecialties = {
+      data: specialties,
+      expiresAt: Date.now() + SPECIALTY_CACHE_TTL * 1000,
+    };
+    return specialties;
+  }
+
+  // ─── Helper: match city from query (database-backed) ──────────────────
+  private async matchCity(q: string): Promise<{ city: string; state: string } | null> {
+    // Common city abbreviation map for fast local matching
+    const knownCities = [
       { pattern: /sao paulo/i, city: 'São Paulo', state: 'SP' },
       { pattern: /rio de janeiro/i, city: 'Rio de Janeiro', state: 'RJ' },
       { pattern: /belo horizonte/i, city: 'Belo Horizonte', state: 'MG' },
@@ -239,12 +412,39 @@ export class AgenticSearchService {
       { pattern: /ribeirao preto/i, city: 'Ribeirão Preto', state: 'SP' },
       { pattern: /goiania/i, city: 'Goiânia', state: 'GO' },
     ];
-    return cityPatterns.find((cp) => cp.pattern.test(q)) || null;
+    const localMatch = knownCities.find((cp) => cp.pattern.test(q));
+    if (localMatch) return { city: localMatch.city, state: localMatch.state };
+
+    // State code match (e.g., "em SP", "no RJ")
+    const stateMatch = q.match(/\b(?:em|no|na|de)\s+([a-z]{2})\b/i);
+    if (stateMatch) {
+      const stateCode = stateMatch[1].toUpperCase();
+      const doctorsInState = await this.prisma.doctor.findFirst({
+        where: { state: stateCode },
+        select: { city: true, state: true },
+      });
+      if (doctorsInState?.city) {
+        return { city: doctorsInState.city, state: doctorsInState.state || stateCode };
+      }
+    }
+
+    // Fallback: try to find city in database by partial match
+    const words = q.split(' ').filter(w => w.length > 3);
+    for (const word of words) {
+      const normalized = word.charAt(0).toUpperCase() + word.slice(1);
+      const found = await this.prisma.doctor.findFirst({
+        where: { city: { contains: normalized, mode: 'insensitive' } },
+        select: { city: true, state: true },
+      });
+      if (found?.city) {
+        return { city: found.city, state: found.state || '' };
+      }
+    }
+
+    return null;
   }
 
-  // ─── Cache key builder ──────────────────────────────────────────────
-  // Normalizes the query so "Cardiologistas em SP" and "cardiologistas em sp"
-  // hit the same cache entry.
+  // ─── Cache key builder (SHA-256 for collision resistance) ─────────────
   private buildCacheKey(prefix: string, doctorId: string, query: string): string {
     const normalized = query
       .toLowerCase()
@@ -252,8 +452,79 @@ export class AgenticSearchService {
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
       .replace(/\s+/g, ' ');
-    const hash = crypto.createHash('md5').update(normalized).digest('hex').slice(0, 12);
+    const hash = crypto.createHash('sha256').update(normalized).digest('hex').slice(0, 16);
     return `agentic:${prefix}:${doctorId}:${hash}`;
+  }
+
+  // ─── Event-driven cache invalidation ──────────────────────────────────
+
+  async invalidateCacheForDoctor(doctorId: string): Promise<void> {
+    const keys = [
+      `agentic:recommendations:${doctorId}`,
+      `agentic:collaboration:${doctorId}`,
+      `agentic:career:${doctorId}`,
+      `agentic:events:${doctorId}`,
+    ];
+    try {
+      await Promise.all(keys.map((k) => this.redis.del(k)));
+      this.logger.debug(`Cache invalidated for doctor ${doctorId}`);
+    } catch (e) {
+      this.logger.warn(`Failed to invalidate cache for doctor ${doctorId}`, e?.message);
+    }
+  }
+
+  @OnEvent(EVENTS.DOCTOR_UPDATED)
+  async onDoctorUpdated(payload: { id: string }) {
+    await this.invalidateCacheForDoctor(payload.id);
+  }
+
+  @OnEvent(EVENTS.CONNECTION_CREATED)
+  async onConnectionCreated(payload: { doctorId: string; targetDoctorId: string }) {
+    await Promise.all([
+      this.invalidateCacheForDoctor(payload.doctorId),
+      this.invalidateCacheForDoctor(payload.targetDoctorId),
+    ]);
+  }
+
+  @OnEvent(EVENTS.CONNECTION_REMOVED)
+  async onConnectionRemoved(payload: { doctorId: string; targetDoctorId: string }) {
+    await Promise.all([
+      this.invalidateCacheForDoctor(payload.doctorId),
+      this.invalidateCacheForDoctor(payload.targetDoctorId),
+    ]);
+  }
+
+  @OnEvent(EVENTS.SPECIALTY_ADDED)
+  @OnEvent(EVENTS.SPECIALTY_REMOVED)
+  @OnEvent(EVENTS.SKILL_ADDED)
+  @OnEvent(EVENTS.SKILL_REMOVED)
+  async onDoctorProfileChanged(payload: { doctorId: string }) {
+    await this.invalidateCacheForDoctor(payload.doctorId);
+    // Also invalidate specialty cache so new searches reflect changes
+    this.cachedSpecialties = null;
+  }
+
+  @OnEvent(EVENTS.JOB_CREATED)
+  @OnEvent(EVENTS.JOB_DEACTIVATED)
+  async onJobChanged() {
+    // Job changes affect all doctor search caches — clear specialty cache
+    // Individual doctor caches will expire via TTL (no full flush needed)
+    this.cachedSpecialties = null;
+  }
+
+  @OnEvent(EVENTS.CERTIFICATION_AWARDED)
+  @OnEvent(EVENTS.MENTORSHIP_CREATED)
+  @OnEvent(EVENTS.MENTORSHIP_ENDED)
+  async onCareerChanged(payload: { doctorId: string }) {
+    await this.invalidateCacheForDoctor(payload.doctorId);
+  }
+
+  @OnEvent(EVENTS.PUBLICATION_CREATED)
+  @OnEvent(EVENTS.CASE_STUDY_CREATED)
+  @OnEvent(EVENTS.STUDY_GROUP_MEMBER_ADDED)
+  @OnEvent(EVENTS.RESEARCH_PROJECT_MEMBER_ADDED)
+  async onCollaborationChanged(payload: { doctorId: string }) {
+    await this.invalidateCacheForDoctor(payload.doctorId);
   }
 
   private async queryWithLLM(doctorId: string, queryText: string) {
@@ -266,9 +537,28 @@ export class AgenticSearchService {
       ? { doctorId: doctor.id, fullName: doctor.fullName }
       : undefined;
 
-    const result = await this.searchAgent.processQuery(queryText, context);
+    let result: { answer: string; sources: any[] };
+    try {
+      result = await this.searchAgent.processQuery(queryText, context);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
 
-    // Extract structured results from sources
+      // All LLM providers failed or none configured — graceful degradation
+      if (msg.includes('No LLM providers') || msg.includes('LLM providers failed')) {
+        this.logger.warn(`LLM unavailable: ${msg}. Falling back to direct search.`);
+        return {
+          query: queryText,
+          answer: 'A busca inteligente está temporariamente indisponível. '
+            + 'Mostrando resultados da busca direta no banco de dados.',
+          results: [],
+          toolsUsed: [],
+          llmUnavailable: true,
+          fallback: await this.queryWithFallback(doctorId, queryText),
+        };
+      }
+      throw error;
+    }
+
     const structuredResults: any[] = [];
     for (const source of result.sources || []) {
       if (source.data && Array.isArray(source.data)) {
@@ -288,7 +578,6 @@ export class AgenticSearchService {
 
   private formatResultItem(item: any, toolName: string): any {
     if (!item) return null;
-    // Doctor result
     if (item.fullName || item.crm) {
       return {
         type: 'doctor',
@@ -298,7 +587,6 @@ export class AgenticSearchService {
         data: item,
       };
     }
-    // Job result
     if (item.title && (item.shift || item.isActive !== undefined)) {
       return {
         type: 'job',
@@ -308,7 +596,6 @@ export class AgenticSearchService {
         data: item,
       };
     }
-    // Institution result
     if (item.type && item.name && (item.city || item.state)) {
       return {
         type: 'institution',
@@ -318,7 +605,6 @@ export class AgenticSearchService {
         data: item,
       };
     }
-    // Generic
     return {
       type: toolName?.includes('job') ? 'job' : toolName?.includes('institution') ? 'institution' : 'doctor',
       id: item.pgId || item.id || '',
@@ -328,14 +614,11 @@ export class AgenticSearchService {
     };
   }
 
-  /**
-   * Fallback search using Neo4j graph + Prisma when no LLM is configured.
-   */
   private async queryWithFallback(doctorId: string, queryText: string) {
     const q = queryText.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
     const matchedSpec = await this.matchSpecialty(q);
-    const matchedCity = this.matchCity(q);
+    const matchedCity = await this.matchCity(q);
 
     const isJob = /vaga|vagas|plantao|plantoes|emprego|trabalho/.test(q);
     const isInst = /hospital|hospitais|clinica|clinicas|instituicao|instituicoes|upa|ubs/.test(q);
@@ -343,25 +626,5 @@ export class AgenticSearchService {
     if (isJob) return this.directJobSearch(matchedSpec, matchedCity, q);
     if (isInst) return this.directInstitutionSearch(matchedCity);
     return this.directDoctorSearch(doctorId, matchedSpec, matchedCity);
-  }
-
-  async getRecommendations(doctorId: string) {
-    // ─── Redis cache for recommendations ──────────────────────────────
-    const cacheKey = `agentic:recommendations:${doctorId}`;
-    const cached = await this.redis.getJson<any>(cacheKey);
-    if (cached) {
-      this.logger.log(`Recommendations cache HIT for doctor ${doctorId}`);
-      return { ...cached, cached: true };
-    }
-
-    const result = await this.recommendationAgent.getRecommendations(doctorId);
-
-    try {
-      await this.redis.setJson(cacheKey, result, RECOMMENDATION_CACHE_TTL);
-    } catch (e) {
-      this.logger.warn('Failed to cache recommendations', e?.message);
-    }
-
-    return result;
   }
 }
