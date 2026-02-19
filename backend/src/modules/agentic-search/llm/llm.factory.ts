@@ -72,10 +72,20 @@ export class LLMFactory {
     options?: LLMChatOptions,
   ): Promise<LLMResponse & { provider: string }> {
     if (this.fallbackChain.length === 0) {
-      throw new Error('No LLM providers configured');
+      this.logger.error(
+        'Nenhum provider LLM configurado. Defina pelo menos uma chave API no .env: ' +
+        'OPENAI_API_KEY, ANTHROPIC_API_KEY ou GOOGLE_AI_API_KEY',
+      );
+      return {
+        content: 'Funcionalidade de IA indisponível: nenhum provedor LLM configurado. ' +
+          'Configure OPENAI_API_KEY, ANTHROPIC_API_KEY ou GOOGLE_AI_API_KEY no arquivo .env.',
+        toolCalls: [],
+        finishReason: 'error',
+        provider: 'none',
+      };
     }
 
-    let lastError: Error | null = null;
+    const errors: string[] = [];
 
     for (const providerKey of this.fallbackChain) {
       const adapter = this.adapters.get(providerKey)!;
@@ -83,15 +93,24 @@ export class LLMFactory {
         const response = await adapter.chat(messages, tools, options);
         return { ...response, provider: providerKey };
       } catch (error) {
-        lastError = error instanceof Error ? error : new Error(String(error));
+        const message = error instanceof Error ? error.message : String(error);
+        errors.push(`${providerKey}: ${message}`);
         this.logger.warn(
-          `LLM provider '${providerKey}' failed: ${lastError.message}. ` +
-          `Trying next provider...`,
+          `LLM provider '${providerKey}' failed: ${message}. ` +
+          (this.fallbackChain.indexOf(providerKey) < this.fallbackChain.length - 1
+            ? 'Trying next provider...'
+            : 'No more providers to try.'),
         );
       }
     }
 
-    throw lastError || new Error('All LLM providers failed');
+    this.logger.error(`Todos os providers LLM falharam: ${errors.join(' | ')}`);
+    return {
+      content: 'Todos os provedores de IA falharam temporariamente. Tente novamente em alguns instantes.',
+      toolCalls: [],
+      finishReason: 'error',
+      provider: 'none',
+    };
   }
 
   getAvailableProviders(): string[] {

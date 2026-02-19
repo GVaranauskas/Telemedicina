@@ -10,6 +10,9 @@ import {
 
 const DEFAULT_MODEL = 'claude-sonnet-4-20250514';
 const DEFAULT_MAX_TOKENS = 4096;
+const REQUEST_TIMEOUT_MS = 30_000;
+const MAX_RETRIES = 3;
+const RETRYABLE_STATUS_CODES = [429, 500, 502, 503, 504];
 
 @Injectable()
 export class ClaudeAdapter implements ILLMAdapter {
@@ -96,7 +99,7 @@ export class ClaudeAdapter implements ILLMAdapter {
       });
     }
 
-    const response = await fetch(`${this.baseUrl}/messages`, {
+    const data = await this.fetchWithRetry(`${this.baseUrl}/messages`, {
       method: 'POST',
       headers: {
         'x-api-key': this.apiKey,
@@ -106,14 +109,6 @@ export class ClaudeAdapter implements ILLMAdapter {
       },
       body: JSON.stringify(body),
     });
-
-    if (!response.ok) {
-      const error = await response.text();
-      this.logger.error(`Claude API error: ${error}`);
-      throw new Error(`Claude API error: ${response.status}`);
-    }
-
-    const data = await response.json();
 
     // Log cache performance for monitoring
     if (data.usage) {
@@ -149,5 +144,77 @@ export class ClaudeAdapter implements ILLMAdapter {
       })),
       finishReason: data.stop_reason,
     };
+  }
+
+  // ─── Fetch with timeout + retry + descriptive errors ────────────────
+  private async fetchWithRetry(url: string, init: RequestInit): Promise<any> {
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+      try {
+        const response = await fetch(url, { ...init, signal: controller.signal });
+
+        if (response.ok) {
+          return await response.json();
+        }
+
+        const errorBody = await response.text();
+        const descriptive = this.buildDescriptiveError(response.status, errorBody);
+
+        // Retry only on transient errors
+        if (RETRYABLE_STATUS_CODES.includes(response.status) && attempt < MAX_RETRIES) {
+          const delay = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
+          this.logger.warn(
+            `Claude API ${response.status} (attempt ${attempt + 1}/${MAX_RETRIES + 1}): ${descriptive}. Retrying in ${delay}ms...`,
+          );
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          lastError = new Error(descriptive);
+          continue;
+        }
+
+        this.logger.error(`Claude API error: ${descriptive}`);
+        throw new Error(descriptive);
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') {
+          const msg = `Claude API timeout after ${REQUEST_TIMEOUT_MS / 1000}s (attempt ${attempt + 1}/${MAX_RETRIES + 1})`;
+          if (attempt < MAX_RETRIES) {
+            const delay = Math.pow(2, attempt) * 1000;
+            this.logger.warn(`${msg}. Retrying in ${delay}ms...`);
+            await new Promise((resolve) => setTimeout(resolve, delay));
+            lastError = new Error(msg);
+            continue;
+          }
+          throw new Error(msg);
+        }
+        throw error;
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    }
+
+    throw lastError || new Error('Claude API: all retry attempts failed');
+  }
+
+  private buildDescriptiveError(status: number, body: string): string {
+    switch (status) {
+      case 401:
+        return 'Chave API da Anthropic inválida ou expirada. Verifique ANTHROPIC_API_KEY no .env';
+      case 403:
+        return 'Acesso negado pela API da Anthropic. Verifique permissões da chave API';
+      case 404:
+        return 'Endpoint da API Anthropic não encontrado. Verifique o modelo configurado';
+      case 429:
+        return 'Rate limit da API Anthropic excedido. Aguardando antes de tentar novamente';
+      case 500:
+      case 502:
+      case 503:
+      case 504:
+        return `Servidor da API Anthropic indisponível (HTTP ${status}). Erro temporário`;
+      default:
+        return `Claude API error (HTTP ${status}): ${body.slice(0, 200)}`;
+    }
   }
 }
