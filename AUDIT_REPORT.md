@@ -65,7 +65,7 @@ app.enableCors({
 - **Correcao:** Remover fallback; lancar erro se secret nao configurado; usar secrets de 256+ bits
 
 ### 1.3 Credenciais Hardcoded em Multiplos Arquivos
-- **Arquivos:** `.env.example`, `docker-compose.dev.yml`, configs de banco
+- **Arquivos:** `.env.example`, `docker-compose.yml`, configs de banco
 - **Problema:** Senha `medconnect_dev_2026` repetida em Neo4j, Redis, PostgreSQL e commitada no repositorio
 - **Impacto:** Comprometimento total dos bancos de dados
 
@@ -435,14 +435,14 @@ model AuditLog {
 - **Correcao:** Adicionar `USER nodejs` no Dockerfile
 
 ### 9.2 CRITICO: Todas as Portas de Banco Expostas
-- **Arquivo:** `docker-compose.dev.yml`
+- **Arquivo:** `docker-compose.yml`
 - **Problema:** PostgreSQL (5432), Neo4j (7474, 7687), ScyllaDB (9042, 9180), Redis (6379) todos expostos ao host
 
 ### 9.3 CRITICO: Sem Segmentacao de Rede
 - **Problema:** Todos os servicos na rede bridge padrao; container comprometido acessa tudo
 
 ### 9.4 ALTO: Neo4j com Procedures Irrestritas
-- **Arquivo:** `docker-compose.dev.yml` (linha 29)
+- **Arquivo:** `docker-compose.yml` (linha 29)
 - **Problema:** `apoc.*` sem restricao; APOC pode executar comandos do sistema
 
 ### 9.5 ALTO: Neo4j Browser Exposto
