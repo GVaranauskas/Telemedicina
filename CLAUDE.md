@@ -34,8 +34,11 @@ cd mobile && flutter pub get
 flutter run
 flutter test
 
-# Docker (databases)
-docker-compose -f docker-compose.dev.yml up -d
+# Docker (databases only - development)
+docker compose up -d
+
+# Docker (databases + backend - production-like)
+docker compose --profile full up -d
 ```
 
 ## Architecture Notes
