@@ -28,7 +28,7 @@ Plataforma de networking profissional para médicos brasileiros, conectando prof
 ### 1. Subir os bancos de dados (Docker)
 
 ```bash
-docker-compose -f docker-compose.dev.yml up -d
+docker-compose up -d
 ```
 
 ### 2. Backend
