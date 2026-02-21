@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/providers/appointment_provider.dart';
-import '../../../core/models/appointment_model.dart';
 import '../../../core/models/doctor_model.dart';
 import '../../../core/providers/api_provider.dart';
 import '../../../core/repositories/doctor_repository.dart';
@@ -60,14 +59,27 @@ class _DoctorSearchScreenState extends ConsumerState<DoctorSearchScreen> {
   }
 
   Future<void> _selectDate() async {
+    final now = DateTime.now();
     final picked = await showDatePicker(
       context: context,
-      initialDate: DateTime.now().add(const Duration(days: 1)),
-      firstDate: DateTime.now(),
-      lastDate: DateTime.now().add(const Duration(days: 90)),
-      locale: const Locale('pt', 'BR'),
+      initialDate: now.add(const Duration(days: 1)),
+      firstDate: now,
+      lastDate: now.add(const Duration(days: 90)),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: ColorScheme.light(
+              primary: Theme.of(context).primaryColor,
+              onPrimary: Colors.white,
+              surface: Colors.white,
+              onSurface: Colors.black,
+            ),
+          ),
+          child: child!,
+        );
+      },
     );
-    if (picked != null) {
+    if (picked != null && mounted) {
       setState(() {
         _dateController.text =
             '${picked.day.toString().padLeft(2, '0')}/${picked.month.toString().padLeft(2, '0')}/${picked.year}';
@@ -79,7 +91,19 @@ class _DoctorSearchScreenState extends ConsumerState<DoctorSearchScreen> {
     if (_dateController.text.isEmpty) return null;
     final parts = _dateController.text.split('/');
     if (parts.length != 3) return null;
-    return '${parts[2]}-${parts[1]}-${parts[0]}';
+    try {
+      final day = int.parse(parts[0]);
+      final month = int.parse(parts[1]);
+      final year = int.parse(parts[2]);
+      // Validate date
+      final date = DateTime(year, month, day);
+      if (date.year != year || date.month != month || date.day != day) {
+        return null;
+      }
+      return '${parts[2]}-${parts[1].padLeft(2, '0')}-${parts[0].padLeft(2, '0')}';
+    } catch (e) {
+      return null;
+    }
   }
 
   void _search() {

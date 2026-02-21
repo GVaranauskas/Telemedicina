@@ -1,0 +1,88 @@
+version: '3.8'
+
+# Dev compose: only databases, backend runs natively (npm run start:dev)
+# ScyllaDB is optional - set SCYLLA=true to include it
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: medconnect-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: medconnect
+      POSTGRES_USER: medconnect
+      POSTGRES_PASSWORD: medconnect_dev_2026
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U medconnect']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  neo4j:
+    image: neo4j:5-community
+    container_name: medconnect-neo4j
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH: neo4j/medconnect_dev_2026
+      NEO4J_PLUGINS: '["apoc", "graph-data-science"]'
+      NEO4J_dbms_security_procedures_unrestricted: apoc.*,gds.*
+      NEO4J_dbms_security_procedures_allowlist: apoc.*,gds.*
+      NEO4J_server_memory_heap_initial__size: 256m
+      NEO4J_server_memory_heap_max__size: 512m
+      NEO4J_server_memory_pagecache_size: 256m
+    ports:
+      - '7474:7474'
+      - '7687:7687'
+    volumes:
+      - neo4j_dev_data:/data
+      - neo4j_dev_logs:/logs
+    healthcheck:
+      test: ['CMD-SHELL', 'wget --no-verbose --tries=1 --spider http://localhost:7474 || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  redis:
+    image: redis:7-alpine
+    container_name: medconnect-redis
+    restart: unless-stopped
+    command: redis-server --requirepass medconnect_dev_2026
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_dev_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', '-a', 'medconnect_dev_2026', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  scylladb:
+    image: scylladb/scylla:5.4
+    container_name: medconnect-scylladb
+    profiles: ['scylla']
+    restart: unless-stopped
+    command: --smp 1 --memory 512M --overprovisioned 1 --api-address 0.0.0.0
+    ports:
+      - '9042:9042'
+      - '9180:9180'
+    volumes:
+      - scylla_dev_data:/var/lib/scylla
+    healthcheck:
+      test: ['CMD-SHELL', 'nodetool status | grep -q UN']
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+volumes:
+  postgres_dev_data:
+  neo4j_dev_data:
+  neo4j_dev_logs:
+  redis_dev_data:
+  scylla_dev_data:

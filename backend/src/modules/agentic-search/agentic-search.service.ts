@@ -261,21 +261,22 @@ export class AgenticSearchService {
     const matchedSpec = await this.matchSpecialty(q);
     const matchedCity = await this.matchCity(q);
 
-    const isJob = /vaga|vagas|plantao|plantoes|emprego/.test(q);
-    const isInst = /hospital|hospitais|clinica|clinicas|instituicao|ubs|upa/.test(q);
+    const isJob = /vaga|vagas|plantao|plantoes|emprego|oportunidade/.test(q);
+    const isInst = /hospital|hospitais|clinica|clinicas|instituicao|ubs|upa|laboratorio/.test(q);
     const isSkill = /sabe|faz|procedimento|habilidade|skill/.test(q);
+    const isDoctor = /medico|medicos|doutor|doutora|dra|dr\.?\s|especialista|especialistas/.test(q);
 
-    if (isJob && (matchedSpec || matchedCity)) {
+    if (isJob) {
       return this.directJobSearch(matchedSpec, matchedCity, q);
     }
-    if (isInst && matchedCity) {
+    if (isInst) {
       return this.directInstitutionSearch(matchedCity);
     }
-    if (!isJob && !isInst && !isSkill && matchedSpec && matchedCity) {
-      return this.directDoctorSearch(doctorId, matchedSpec, matchedCity);
-    }
-    if (!isJob && !isInst && !isSkill && matchedSpec && !matchedCity) {
-      return this.directDoctorSearch(doctorId, matchedSpec, null);
+    // Doctor search: by specialty+city, specialty only, or generic "médico" queries
+    if (!isJob && !isInst && !isSkill) {
+      if (matchedSpec || matchedCity || isDoctor) {
+        return this.directDoctorSearch(doctorId, matchedSpec, matchedCity);
+      }
     }
 
     return null;
@@ -312,8 +313,9 @@ export class AgenticSearchService {
   }
 
   private async directInstitutionSearch(city: any) {
+    const where = city ? { city: { contains: city.city, mode: 'insensitive' as const } } : {};
     const institutions = await this.prisma.institution.findMany({
-      where: { city: { contains: city.city, mode: 'insensitive' } },
+      where,
       take: 10,
       orderBy: { name: 'asc' },
     });
@@ -327,7 +329,7 @@ export class AgenticSearchService {
 
     return {
       query: '',
-      answer: `Encontrei ${institutions.length} instituição(ões) em ${city.city}. ${institutions.map((i) => i.name).join(', ')}.`,
+      answer: `Encontrei ${institutions.length} instituição(ões)${city ? ` em ${city.city}` : ''}. ${institutions.map((i) => i.name).join(', ')}.`,
       results,
       toolsUsed: ['search_institutions'],
       routed: 'direct',
@@ -544,19 +546,13 @@ export class AgenticSearchService {
       const msg = error instanceof Error ? error.message : String(error);
 
       // All LLM providers failed or none configured — graceful degradation
-      if (msg.includes('No LLM providers') || msg.includes('LLM providers failed')) {
-        this.logger.warn(`LLM unavailable: ${msg}. Falling back to direct search.`);
-        return {
-          query: queryText,
-          answer: 'A busca inteligente está temporariamente indisponível. '
-            + 'Mostrando resultados da busca direta no banco de dados.',
-          results: [],
-          toolsUsed: [],
-          llmUnavailable: true,
-          fallback: await this.queryWithFallback(doctorId, queryText),
-        };
-      }
-      throw error;
+      this.logger.warn(`LLM unavailable: ${msg}. Falling back to direct search.`);
+      const fallback = await this.queryWithFallback(doctorId, queryText);
+      return {
+        ...fallback,
+        answer: fallback.answer || 'Mostrando resultados da busca direta.',
+        llmUnavailable: true,
+      };
     }
 
     const structuredResults: any[] = [];
@@ -568,10 +564,21 @@ export class AgenticSearchService {
       }
     }
 
+    // If LLM ran but produced no structured results, enrich with direct DB fallback
+    let finalResults = structuredResults;
+    if (finalResults.length === 0) {
+      try {
+        const fallback = await this.queryWithFallback(doctorId, queryText);
+        finalResults = fallback.results || [];
+      } catch {
+        // ignore — return LLM answer without results
+      }
+    }
+
     return {
       query: queryText,
       answer: result.answer,
-      results: structuredResults.length > 0 ? structuredResults : result.sources || [],
+      results: finalResults,
       toolsUsed: [...new Set((result.sources || []).map((s: any) => s.tool).filter(Boolean))],
     };
   }

@@ -2,13 +2,13 @@ class WorkplaceModel {
   final String id;
   final String name;
   final String? phone;
-  final String street;
-  final String number;
+  final String? street;
+  final String? number;
   final String? complement;
-  final String neighborhood;
-  final String city;
-  final String state;
-  final String zipCode;
+  final String? neighborhood;
+  final String? city;
+  final String? state;
+  final String? zipCode;
   final double latitude;
   final double longitude;
 
@@ -16,13 +16,13 @@ class WorkplaceModel {
     required this.id,
     required this.name,
     this.phone,
-    required this.street,
-    required this.number,
+    this.street,
+    this.number,
     this.complement,
-    required this.neighborhood,
-    required this.city,
-    required this.state,
-    required this.zipCode,
+    this.neighborhood,
+    this.city,
+    this.state,
+    this.zipCode,
     required this.latitude,
     required this.longitude,
   });
@@ -32,22 +32,38 @@ class WorkplaceModel {
       id: json['id'],
       name: json['name'] ?? '',
       phone: json['phone'],
-      street: json['street'] ?? '',
-      number: json['number'] ?? '',
+      street: json['street'],
+      number: json['number'],
       complement: json['complement'],
-      neighborhood: json['neighborhood'] ?? '',
-      city: json['city'] ?? '',
-      state: json['state'] ?? '',
-      zipCode: json['zipCode'] ?? '',
+      neighborhood: json['neighborhood'],
+      city: json['city'],
+      state: json['state'],
+      zipCode: json['zipCode'],
       latitude: (json['latitude'] ?? 0).toDouble(),
       longitude: (json['longitude'] ?? 0).toDouble(),
     );
   }
 
-  String get fullAddress =>
-      '$street, $number${complement != null ? ' - $complement' : ''}, $neighborhood, $city/$state - CEP $zipCode';
+  String get fullAddress {
+    final parts = <String>[];
+    if (street != null && street!.isNotEmpty) parts.add(street!);
+    if (number != null && number!.isNotEmpty) parts.add(number!);
+    if (complement != null && complement!.isNotEmpty) parts.add(complement!);
+    if (neighborhood != null && neighborhood!.isNotEmpty) parts.add(neighborhood!);
+    final cityState = <String>[];
+    if (city != null && city!.isNotEmpty) cityState.add(city!);
+    if (state != null && state!.isNotEmpty) cityState.add(state!);
+    if (cityState.isNotEmpty) parts.add(cityState.join('/'));
+    if (zipCode != null && zipCode!.isNotEmpty) parts.add('CEP $zipCode');
+    return parts.isEmpty ? 'Endereço não informado' : parts.join(', ');
+  }
 
-  String get shortAddress => '$neighborhood, $city/$state';
+  String get shortAddress {
+    if (neighborhood != null && city != null) {
+      return '$neighborhood, $city${state != null ? '/$state' : ''}';
+    }
+    return city ?? 'Local não informado';
+  }
 }
 
 class DoctorMatchResult {

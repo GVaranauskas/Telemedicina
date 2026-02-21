@@ -8,7 +8,7 @@ import {
   LLMChatOptions,
 } from './llm-adapter.interface';
 
-const DEFAULT_MODEL = 'claude-haiku-4-5-20251001';
+const DEFAULT_MODEL = 'claude-haiku-4-5';
 const DEFAULT_MAX_TOKENS = 4096;
 const REQUEST_TIMEOUT_MS = 30_000;
 const MAX_RETRIES = 3;

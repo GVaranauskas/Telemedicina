@@ -36,10 +36,13 @@ class SearchNotifier extends StateNotifier<SearchState> {
       final result = await _repo.query(query);
       state = SearchState(result: result, isSearching: false);
     } catch (e) {
-      state = SearchState(
-        isSearching: false,
-        error: 'Erro na busca. Tente novamente.',
-      );
+      final msg = e.toString().contains('401')
+          ? 'Sessão expirada. Faça login novamente.'
+          : e.toString().contains('SocketException') ||
+                  e.toString().contains('Connection refused')
+              ? 'Servidor indisponível. Verifique se o backend está rodando.'
+              : 'Erro na busca: ${e.toString()}';
+      state = SearchState(isSearching: false, error: msg);
     }
   }
 

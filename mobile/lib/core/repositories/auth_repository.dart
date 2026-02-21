@@ -26,6 +26,27 @@ class AuthRepository {
     return AuthResponse.fromJson(response.data);
   }
 
+  Future<AuthResponse> registerPatient({
+    required String email,
+    required String password,
+    required String fullName,
+    String? cpf,
+    String? phone,
+    String? state,
+    String? city,
+  }) async {
+    final response = await _api.dio.post('/auth/register-patient', data: {
+      'email': email,
+      'password': password,
+      'fullName': fullName,
+      if (cpf != null) 'cpf': cpf,
+      if (phone != null) 'phone': phone,
+      if (state != null) 'state': state,
+      if (city != null) 'city': city,
+    });
+    return AuthResponse.fromJson(response.data);
+  }
+
   Future<AuthResponse> login({
     required String email,
     required String password,

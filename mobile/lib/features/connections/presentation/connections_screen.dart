@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/providers/connection_provider.dart';
 import '../../../core/models/connection_model.dart';
@@ -27,6 +28,13 @@ class _ConnectionsScreenState extends ConsumerState<ConnectionsScreen> {
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Minha Rede'),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.hub_outlined),
+              tooltip: 'Ver Grafo',
+              onPressed: () => context.go('/network'),
+            ),
+          ],
           bottom: TabBar(
             tabs: [
               Tab(text: 'Conexões (${state.connections.length})'),

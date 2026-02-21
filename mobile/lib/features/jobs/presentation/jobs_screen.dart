@@ -32,6 +32,45 @@ class _JobsScreenState extends ConsumerState<JobsScreen> {
     );
   }
 
+  Future<void> _applyToJob(JobModel job) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Candidatar-se'),
+        content: Text(
+          'Deseja se candidatar para a vaga "${job.title}"${job.institutionName != null ? ' em ${job.institutionName}' : ''}?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Candidatar-se'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    final success = await ref.read(jobProvider.notifier).applyToJob(job.id);
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          success
+              ? '✓ Candidatura enviada para ${job.title}!'
+              : 'Não foi possível enviar a candidatura. Tente novamente.',
+        ),
+        backgroundColor: success ? AppColors.success : AppColors.error,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   Widget _buildErrorState(String error) {
     return Center(
       child: Column(
@@ -129,7 +168,7 @@ class _JobsScreenState extends ConsumerState<JobsScreen> {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: () {},
+              onPressed: () => _applyToJob(job),
               child: const Text('Candidatar-se'),
             ),
           ),

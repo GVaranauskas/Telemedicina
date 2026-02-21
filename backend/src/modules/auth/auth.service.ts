@@ -83,6 +83,7 @@ export class AuthService {
       result.user.id,
       result.user.email,
       result.user.role,
+      result.doctor.id,
     );
 
     // Store refresh token
@@ -175,7 +176,7 @@ export class AuthService {
   async login(dto: LoginDto) {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
-      include: { doctor: true, institution: true },
+      include: { doctor: true, patient: true, institution: true },
     });
 
     if (!user) {
@@ -187,7 +188,12 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    const tokens = await this.generateTokens(user.id, user.email, user.role);
+    const tokens = await this.generateTokens(
+      user.id,
+      user.email,
+      user.role,
+      user.doctor?.id,
+    );
 
     // Store refresh token hash
     await this.prisma.user.update({
@@ -201,6 +207,8 @@ export class AuthService {
         email: user.email,
         role: user.role,
         doctorId: user.doctor?.id,
+        patientId: user.patient?.id,
+        fullName: user.doctor?.fullName || user.patient?.fullName,
         institutionId: user.institution?.id,
       },
       ...tokens,
@@ -210,6 +218,7 @@ export class AuthService {
   async refreshTokens(userId: string, refreshToken: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
+      include: { doctor: true },
     });
 
     if (!user || !user.refreshToken) {
@@ -221,7 +230,12 @@ export class AuthService {
       throw new UnauthorizedException('Access denied');
     }
 
-    const tokens = await this.generateTokens(user.id, user.email, user.role);
+    const tokens = await this.generateTokens(
+      user.id,
+      user.email,
+      user.role,
+      user.doctor?.id,
+    );
 
     await this.prisma.user.update({
       where: { id: user.id },
@@ -238,8 +252,14 @@ export class AuthService {
     });
   }
 
-  private async generateTokens(userId: string, email: string, role: string) {
-    const payload = { sub: userId, email, role };
+  private async generateTokens(
+    userId: string,
+    email: string,
+    role: string,
+    doctorId?: string,
+  ) {
+    const payload: Record<string, unknown> = { sub: userId, email, role };
+    if (doctorId) payload.doctorId = doctorId;
 
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, {
