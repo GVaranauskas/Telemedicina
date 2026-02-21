@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:timeago/timeago.dart' as timeago;
-import '../../../core/theme/app_theme.dart';
 import '../../../core/providers/feed_provider.dart';
 import '../../../core/models/post_model.dart';
 
@@ -29,66 +28,61 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
       return const Center(
         child: CircularProgressIndicator(
           strokeWidth: 2,
-          color: AppColors.primary,
+          color: Color(0xFF1D9BF0),
         ),
       );
     }
 
     if (state.error != null && state.posts.isEmpty) {
-      return _buildErrorState(state.error!);
+      return _buildError(state.error!);
     }
 
     if (state.posts.isEmpty) {
-      return _buildEmptyState();
+      return _buildEmpty();
     }
 
     return RefreshIndicator(
       onRefresh: () => ref.read(feedProvider.notifier).refresh(),
-      color: AppColors.primary,
-      child: ListView.builder(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      color: const Color(0xFF1D9BF0),
+      child: ListView.separated(
+        padding: EdgeInsets.zero,
         itemCount: state.posts.length,
-        itemBuilder: (context, index) => _buildPostCard(state.posts[index]),
+        separatorBuilder: (_, __) =>
+            const Divider(height: 1, color: Color(0xFFEFF3F4)),
+        itemBuilder: (context, index) =>
+            _Post(post: state.posts[index], index: index),
       ),
     );
   }
 
-  Widget _buildErrorState(String error) {
+  Widget _buildError(String error) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(32),
+        padding: const EdgeInsets.all(40),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Container(
-              width: 64,
-              height: 64,
-              decoration: BoxDecoration(
-                color: AppColors.errorLight,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: const Icon(
-                Icons.cloud_off_outlined,
-                size: 32,
-                color: AppColors.error,
-              ),
-            ),
+            const Icon(Icons.cloud_off_outlined,
+                size: 48, color: Color(0xFF536471)),
             const SizedBox(height: 16),
-            Text(
-              'Erro ao carregar',
-              style: AppTextStyles.headingSmall,
-            ),
+            const Text('Algo deu errado',
+                style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF0F1419))),
             const SizedBox(height: 8),
-            Text(
-              error,
-              style: AppTextStyles.bodySmall,
-              textAlign: TextAlign.center,
-            ),
+            Text(error,
+                style: const TextStyle(fontSize: 15, color: Color(0xFF536471)),
+                textAlign: TextAlign.center),
             const SizedBox(height: 24),
-            ElevatedButton.icon(
+            FilledButton(
               onPressed: () => ref.read(feedProvider.notifier).loadFeed(),
-              icon: const Icon(Icons.refresh, size: 18),
-              label: const Text('Tentar novamente'),
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF1D9BF0),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20)),
+              ),
+              child: const Text('Tentar novamente'),
             ),
           ],
         ),
@@ -96,174 +90,284 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmpty() {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(32),
+        padding: const EdgeInsets.all(40),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Container(
-              width: 64,
-              height: 64,
-              decoration: BoxDecoration(
-                color: AppColors.primaryLight,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: const Icon(
-                Icons.article_outlined,
-                size: 32,
-                color: AppColors.primary,
-              ),
-            ),
+            const Icon(Icons.article_outlined,
+                size: 48, color: Color(0xFF536471)),
             const SizedBox(height: 16),
-            Text(
-              'Seu feed está vazio',
-              style: AppTextStyles.headingSmall,
-            ),
+            const Text('Seu feed está vazio',
+                style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF0F1419))),
             const SizedBox(height: 8),
-            Text(
-              'Conecte-se com outros médicos para ver atualizações',
-              style: AppTextStyles.bodySmall,
-              textAlign: TextAlign.center,
-            ),
+            const Text('Conecte-se com outros médicos para ver atualizações',
+                style: TextStyle(fontSize: 15, color: Color(0xFF536471)),
+                textAlign: TextAlign.center),
             const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: () => context.push('/network'),
-              icon: const Icon(Icons.people_outline, size: 18),
-              label: const Text('Encontrar conexões'),
+            FilledButton(
+              onPressed: () => context.push('/connections'),
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF1D9BF0),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20)),
+              ),
+              child: const Text('Encontrar conexões'),
             ),
           ],
         ),
       ),
     );
   }
+}
 
-  Widget _buildPostCard(PostModel post) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header com avatar e nome
-          Row(
-            children: [
-              _buildAvatar(post.authorName),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      post.authorName,
-                      style: AppTextStyles.titleMedium,
-                    ),
-                    Text(
-                      timeago.format(post.createdAt, locale: 'pt_BR'),
-                      style: AppTextStyles.caption,
-                    ),
-                  ],
+// ─── Post Widget ──────────────────────────────────────────────────────────────
+
+class _Post extends ConsumerStatefulWidget {
+  final PostModel post;
+  final int index;
+
+  const _Post({required this.post, required this.index});
+
+  @override
+  ConsumerState<_Post> createState() => _PostState();
+}
+
+class _PostState extends ConsumerState<_Post> {
+  bool _liked = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _liked = widget.post.isLiked;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final post = widget.post;
+    final initials = _initials(post.authorName);
+    final avatarColor = _avatarColor(post.authorId);
+
+    return InkWell(
+      onTap: () {},
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Avatar
+            CircleAvatar(
+              radius: 20,
+              backgroundColor: avatarColor.withOpacity(0.15),
+              child: Text(
+                initials,
+                style: TextStyle(
+                  color: avatarColor,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
                 ),
               ),
-              IconButton(
-                icon: const Icon(Icons.more_horiz, size: 20),
-                onPressed: () {},
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          // Conteúdo
-          Text(
-            post.content,
-            style: AppTextStyles.bodyMedium,
-          ),
-          // Se tiver imagem
-          if (post.mediaUrls.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: Image.network(
-                post.mediaUrls.first,
-                fit: BoxFit.cover,
-                width: double.infinity,
-                height: 200,
+            ),
+            const SizedBox(width: 12),
+            // Content column
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Name + time
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          post.authorName,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 15,
+                            color: Color(0xFF0F1419),
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '· ${timeago.format(post.createdAt, locale: 'pt_BR')}',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: Color(0xFF536471),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      GestureDetector(
+                        onTap: () {},
+                        child: const Icon(Icons.more_horiz,
+                            size: 18, color: Color(0xFF536471)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  // Post content
+                  Text(
+                    post.content,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      color: Color(0xFF0F1419),
+                      height: 1.4,
+                    ),
+                  ),
+                  // Media
+                  if (post.mediaUrls.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: Image.network(
+                        post.mediaUrls.first,
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                        height: 200,
+                      ),
+                    ),
+                  ],
+                  // Tags
+                  if (post.tags.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 4,
+                      runSpacing: 4,
+                      children: post.tags
+                          .take(3)
+                          .map((tag) => Text(
+                                '#$tag',
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  color: Color(0xFF1D9BF0),
+                                ),
+                              ))
+                          .toList(),
+                    ),
+                  ],
+                  const SizedBox(height: 10),
+                  // Action bar
+                  Row(
+                    children: [
+                      _ActionBtn(
+                        icon: Icons.chat_bubble_outline_rounded,
+                        activeIcon: Icons.chat_bubble_rounded,
+                        count: post.commentCount,
+                        isActive: false,
+                        activeColor: const Color(0xFF1D9BF0),
+                        onTap: () {},
+                      ),
+                      const SizedBox(width: 32),
+                      _ActionBtn(
+                        icon: Icons.repeat_rounded,
+                        activeIcon: Icons.repeat_rounded,
+                        count: 0,
+                        isActive: false,
+                        activeColor: const Color(0xFF00BA7C),
+                        onTap: () {},
+                      ),
+                      const SizedBox(width: 32),
+                      _ActionBtn(
+                        icon: Icons.favorite_outline_rounded,
+                        activeIcon: Icons.favorite_rounded,
+                        count: post.likeCount + (_liked && !post.isLiked ? 1 : 0),
+                        isActive: _liked,
+                        activeColor: const Color(0xFFF91880),
+                        onTap: () async {
+                          setState(() => _liked = !_liked);
+                          await ref.read(feedProvider.notifier).likePost(widget.index);
+                        },
+                      ),
+                      const Spacer(),
+                      GestureDetector(
+                        onTap: () {},
+                        child: const Icon(Icons.ios_share_outlined,
+                            size: 18, color: Color(0xFF536471)),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
           ],
-          const SizedBox(height: 16),
-          // Actions
-          Row(
-            children: [
-              _buildActionButton(
-                Icons.favorite_outline,
-                '${post.likeCount}',
-                onTap: () {},
-              ),
-              const SizedBox(width: 24),
-              _buildActionButton(
-                Icons.chat_bubble_outline,
-                '${post.commentCount}',
-                onTap: () {},
-              ),
-              const SizedBox(width: 24),
-              _buildActionButton(
-                Icons.share_outlined,
-                'Compartilhar',
-                onTap: () {},
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAvatar(String name) {
-    return Container(
-      width: 44,
-      height: 44,
-      decoration: BoxDecoration(
-        color: AppColors.primaryLight,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Center(
-        child: Text(
-          name.isNotEmpty ? name[0].toUpperCase() : '?',
-          style: AppTextStyles.titleMedium.copyWith(
-            color: AppColors.primary,
-          ),
         ),
       ),
     );
   }
 
-  Widget _buildActionButton(IconData icon, String label, {required VoidCallback onTap}) {
+  String _initials(String name) {
+    final parts = name.trim().split(' ').where((p) => p.isNotEmpty).toList();
+    if (parts.isEmpty) return '?';
+    if (parts.length == 1) return parts[0][0].toUpperCase();
+    return '${parts[0][0]}${parts.last[0]}'.toUpperCase();
+  }
+
+  Color _avatarColor(String id) {
+    final colors = [
+      const Color(0xFF1D9BF0),
+      const Color(0xFF00BA7C),
+      const Color(0xFFF91880),
+      const Color(0xFFFF7A00),
+      const Color(0xFF7856FF),
+      const Color(0xFF0099FF),
+    ];
+    final hash = id.codeUnits.fold(0, (a, b) => a + b);
+    return colors[hash % colors.length];
+  }
+}
+
+// ─── Action Button ────────────────────────────────────────────────────────────
+
+class _ActionBtn extends StatelessWidget {
+  final IconData icon;
+  final IconData activeIcon;
+  final int count;
+  final bool isActive;
+  final Color activeColor;
+  final VoidCallback onTap;
+
+  const _ActionBtn({
+    required this.icon,
+    required this.activeIcon,
+    required this.count,
+    required this.isActive,
+    required this.activeColor,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
       child: Row(
         children: [
           Icon(
-            icon,
+            isActive ? activeIcon : icon,
             size: 18,
-            color: AppColors.textSecondary,
+            color: isActive ? activeColor : const Color(0xFF536471),
           ),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: AppTextStyles.labelMedium.copyWith(
-              color: AppColors.textSecondary,
+          if (count > 0) ...[
+            const SizedBox(width: 4),
+            Text(
+              _format(count),
+              style: TextStyle(
+                fontSize: 13,
+                color: isActive ? activeColor : const Color(0xFF536471),
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );
+  }
+
+  String _format(int n) {
+    if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}k';
+    return '$n';
   }
 }

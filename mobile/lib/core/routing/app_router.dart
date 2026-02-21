@@ -4,8 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/presentation/register_screen.dart';
+import '../../features/auth/presentation/register_patient_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
-import '../../features/feed/presentation/feed_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
 import '../../features/jobs/presentation/jobs_screen.dart';
 import '../../features/chat/presentation/chat_list_screen.dart';
@@ -13,6 +13,9 @@ import '../../features/chat/presentation/chat_detail_screen.dart';
 import '../../features/smart_search/presentation/smart_search_screen.dart';
 import '../../features/notifications/presentation/notifications_screen.dart';
 import '../../features/network/presentation/network_graph_screen.dart';
+import '../../features/connections/presentation/connections_screen.dart';
+import '../../features/appointment/presentation/my_appointments_screen.dart';
+import '../../features/appointment/presentation/doctor_search_screen.dart';
 import '../../shared/widgets/main_scaffold.dart';
 import '../network/api_client.dart';
 
@@ -20,13 +23,22 @@ final _rootNavigatorKey = GlobalKey<NavigatorState>();
 final _shellNavigatorKey = GlobalKey<NavigatorState>();
 
 final routerProvider = Provider<GoRouter>((ref) {
+  // When token refresh fails, clear session and go to login
+  ApiClient.onSessionExpired = () {
+    final context = _rootNavigatorKey.currentContext;
+    if (context != null) {
+      GoRouter.of(context).go('/login');
+    }
+  };
+
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
     initialLocation: '/login',
     redirect: (context, state) async {
       final location = state.uri.toString();
-      final isAuthRoute =
-          location == '/login' || location == '/register';
+      final isAuthRoute = location == '/login' ||
+          location == '/register' ||
+          location == '/register-patient';
 
       // Check if user has a stored token
       final token = await ApiClient.getAccessToken();
@@ -50,6 +62,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/register',
         builder: (context, state) => const RegisterScreen(),
       ),
+      GoRoute(
+        path: '/register-patient',
+        builder: (context, state) => const RegisterPatientScreen(),
+      ),
 
       // Main app with bottom nav
       ShellRoute(
@@ -61,8 +77,12 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const HomeScreen(),
           ),
           GoRoute(
-            path: '/feed',
-            builder: (context, state) => const FeedScreen(),
+            path: '/connections',
+            builder: (context, state) => const ConnectionsScreen(),
+          ),
+          GoRoute(
+            path: '/network',
+            builder: (context, state) => const NetworkGraphScreen(),
           ),
           GoRoute(
             path: '/search',
@@ -80,8 +100,12 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const ProfileScreen(),
           ),
           GoRoute(
-            path: '/network',
-            builder: (context, state) => const NetworkGraphScreen(),
+            path: '/appointments',
+            builder: (context, state) => const MyAppointmentsScreen(),
+          ),
+          GoRoute(
+            path: '/doctor-search',
+            builder: (context, state) => const DoctorSearchScreen(),
           ),
         ],
       ),
@@ -107,12 +131,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/notifications',
         builder: (context, state) => const NotificationsScreen(),
       ),
+      // Feed is embedded in HomeScreen, no dedicated route needed
       GoRoute(
-        path: '/smart-search',
-        builder: (context, state) {
-          final query = state.uri.queryParameters['query'] ?? '';
-          return SmartSearchScreen(initialQuery: query);
-        },
+        path: '/feed',
+        redirect: (_, __) => '/home',
       ),
     ],
   );

@@ -8,13 +8,14 @@ class ApiClient {
   static String get baseUrl {
     const envUrl = String.fromEnvironment('API_URL');
     if (envUrl.isNotEmpty) return envUrl;
-    // Default: localhost for web/emulator
     return 'http://localhost:3000/api/v1';
   }
 
   static final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
-  /// Prevent infinite refresh loops
+  /// Called when session expires and refresh fails — use to redirect to login
+  static VoidCallback? onSessionExpired;
+
   bool _isRefreshing = false;
 
   late final Dio dio;
@@ -37,17 +38,19 @@ class ApiClient {
       },
       onError: (error, handler) async {
         if (error.response?.statusCode == 401 && !_isRefreshing) {
-          // Try to refresh token (prevent re-entrant calls)
           _isRefreshing = true;
           try {
             final refreshed = await _tryRefreshToken();
             if (refreshed) {
-              // Retry original request with new token
               final token = await _storage.read(key: 'access_token');
               error.requestOptions.headers['Authorization'] = 'Bearer $token';
               final response = await dio.fetch(error.requestOptions);
               handler.resolve(response);
               return;
+            } else {
+              // Refresh failed — clear tokens so app redirects to login
+              await clearTokens();
+              onSessionExpired?.call();
             }
           } finally {
             _isRefreshing = false;

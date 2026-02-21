@@ -152,7 +152,8 @@ Analise esses dados e gere recomendações personalizadas no formato JSON especi
 
   private async getSuggestedConnections(doctorId: string) {
     try {
-      const results = await this.neo4j.read(
+      // Strategy 1: friends of friends
+      const fof = await this.neo4j.read(
         `MATCH (me:Doctor {pgId: $doctorId})-[:CONNECTED_TO]->(friend:Doctor)-[:CONNECTED_TO]->(suggestion:Doctor)
          WHERE suggestion.pgId <> $doctorId
            AND NOT (me)-[:CONNECTED_TO]->(suggestion)
@@ -160,15 +161,62 @@ Analise esses dados e gere recomendações personalizadas no formato JSON especi
          ORDER BY mutual DESC
          LIMIT 5
          RETURN suggestion.pgId AS id, suggestion.fullName AS name,
-                suggestion.profilePicUrl AS picUrl, mutual AS mutualConnections`,
+                suggestion.city AS city, suggestion.state AS state,
+                suggestion.profilePicUrl AS picUrl, mutual AS mutualConnections,
+                'mutual' AS reason`,
         { doctorId },
       );
-      return results.map((r: Record<string, unknown>) => ({
-        id: r.id as string,
-        name: r.name as string,
-        picUrl: r.picUrl as string | null,
-        mutualConnections: toNumber(r.mutualConnections),
-      }));
+
+      // Strategy 2: same specialty not yet connected
+      const sameSpec = await this.neo4j.read(
+        `MATCH (me:Doctor {pgId: $doctorId})-[:SPECIALIZES_IN]->(spec:Specialty)<-[:SPECIALIZES_IN]-(suggestion:Doctor)
+         WHERE suggestion.pgId <> $doctorId
+           AND NOT (me)-[:CONNECTED_TO]->(suggestion)
+         WITH suggestion, collect(DISTINCT spec.name) AS sharedSpecialties
+         LIMIT 5
+         RETURN suggestion.pgId AS id, suggestion.fullName AS name,
+                suggestion.city AS city, suggestion.state AS state,
+                suggestion.profilePicUrl AS picUrl, 0 AS mutualConnections,
+                sharedSpecialties[0] AS reason`,
+        { doctorId },
+      );
+
+      // Strategy 3: same city, different specialty (geographic proximity)
+      const sameCity = await this.neo4j.read(
+        `MATCH (me:Doctor {pgId: $doctorId}), (suggestion:Doctor)
+         WHERE suggestion.pgId <> $doctorId
+           AND suggestion.city = me.city
+           AND NOT (me)-[:CONNECTED_TO]->(suggestion)
+         OPTIONAL MATCH (suggestion)-[:SPECIALIZES_IN]->(spec:Specialty)
+         WITH suggestion, collect(DISTINCT spec.name) AS specs
+         LIMIT 5
+         RETURN suggestion.pgId AS id, suggestion.fullName AS name,
+                suggestion.city AS city, suggestion.state AS state,
+                suggestion.profilePicUrl AS picUrl, 0 AS mutualConnections,
+                'mesma cidade' AS reason`,
+        { doctorId },
+      );
+
+      // Deduplicate by id, prioritizing fof > sameSpec > sameCity
+      const seen = new Set<string>();
+      const all = [...fof, ...sameSpec, ...sameCity];
+      return all
+        .filter((r: Record<string, unknown>) => {
+          const id = r.id as string;
+          if (!id || seen.has(id)) return false;
+          seen.add(id);
+          return true;
+        })
+        .slice(0, 10)
+        .map((r: Record<string, unknown>) => ({
+          id: r.id as string,
+          name: r.name as string,
+          city: r.city as string | null,
+          state: r.state as string | null,
+          picUrl: r.picUrl as string | null,
+          mutualConnections: toNumber(r.mutualConnections),
+          reason: r.reason as string | null,
+        }));
     } catch (error) {
       this.logger.error('Failed to get connection suggestions', error);
       return [];
@@ -176,62 +224,90 @@ Analise esses dados e gere recomendações personalizadas no formato JSON especi
   }
 
   private async getSuggestedJobs(doctorId: string) {
+    // Always use PostgreSQL — reliable source for jobs with specialty + location match
     try {
-      // Find jobs matching doctor's specialties or location
-      const results = await this.neo4j.read(
-        `MATCH (me:Doctor {pgId: $doctorId})-[:SPECIALIZES_IN]->(spec:Specialty)
-         OPTIONAL MATCH (me)-[:LOCATED_IN]->(myCity:City)
-         WITH me, collect(DISTINCT spec.name) AS mySpecs, myCity
-         MATCH (j:Job {isActive: true})<-[:POSTED]-(i:Institution)
-         OPTIONAL MATCH (j)-[:REQUIRES]->(jSpec:Specialty)
-         WHERE (myCity IS NOT NULL AND j.city = myCity.name)
-            OR (jSpec IS NOT NULL AND jSpec.name IN mySpecs)
-         RETURN DISTINCT j.pgId AS id, j.title AS title, j.type AS type,
-                j.city AS city, j.shift AS shift, i.name AS institution
-         LIMIT 5`,
-        { doctorId },
-      );
-
-      return results;
-    } catch (error) {
-      this.logger.error('Failed to get job suggestions', error);
-      // Fallback to PostgreSQL
       const doctor = await this.prisma.doctor.findUnique({
         where: { id: doctorId },
-        include: { specialties: true },
+        include: { specialties: { include: { specialty: true } } },
       });
 
       if (!doctor) return [];
 
-      return this.prisma.job.findMany({
+      const specialtyIds = doctor.specialties.map((s) => s.specialtyId);
+      const specialtyNames = doctor.specialties.map((s) => s.specialty.name);
+
+      const jobs = await this.prisma.job.findMany({
         where: {
           isActive: true,
           OR: [
-            {
-              specialtyId: {
-                in: doctor.specialties.map((s) => s.specialtyId),
-              },
-            },
-            { city: doctor.city || '' },
+            ...(specialtyIds.length > 0 ? [{ specialtyId: { in: specialtyIds } }] : []),
+            ...(doctor.city ? [{ city: doctor.city }] : []),
+            ...(doctor.state ? [{ state: doctor.state }] : []),
           ],
         },
         include: { institution: { select: { name: true } } },
-        take: 5,
+        take: 8,
         orderBy: { createdAt: 'desc' },
       });
+
+      return jobs.map((j) => ({
+        id: j.id,
+        title: j.title,
+        type: j.type,
+        city: j.city,
+        state: j.state,
+        shift: j.shift,
+        institution: j.institution?.name ?? null,
+        specialtyMatch: specialtyNames.some((s) =>
+          j.title.toLowerCase().includes(s.toLowerCase()),
+        ),
+      }));
+    } catch (error) {
+      this.logger.error('Failed to get job suggestions', error);
+      return [];
     }
   }
 
   private async getSuggestedInstitutions(doctorId: string) {
     try {
-      return await this.neo4j.read(
-        `MATCH (me:Doctor {pgId: $doctorId})-[:LOCATED_IN]->(city:City)
-         MATCH (i:Institution {city: city.name})
-         WHERE NOT (me)-[:WORKS_AT]->(i)
+      // Use doctor.city property directly — no LOCATED_IN needed
+      const neo4jResults = await this.neo4j.read(
+        `MATCH (me:Doctor {pgId: $doctorId})
+         MATCH (i:Institution)
+         WHERE i.city = me.city
+           AND NOT (me)-[:WORKS_AT]->(i)
          RETURN i.pgId AS id, i.name AS name, i.type AS type, i.city AS city
          LIMIT 5`,
         { doctorId },
       );
+
+      if (neo4jResults.length > 0) return neo4jResults;
+    } catch (error) {
+      this.logger.warn('Neo4j institution suggestions failed, using PostgreSQL', error?.message);
+    }
+
+    // Fallback: PostgreSQL
+    try {
+      const doctor = await this.prisma.doctor.findUnique({ where: { id: doctorId } });
+      if (!doctor) return [];
+
+      const institutions = await this.prisma.institution.findMany({
+        where: {
+          OR: [
+            ...(doctor.city ? [{ city: doctor.city }] : []),
+            ...(doctor.state ? [{ state: doctor.state }] : []),
+          ],
+        },
+        take: 5,
+      });
+
+      return institutions.map((i) => ({
+        id: i.id,
+        name: i.name,
+        type: i.type,
+        city: i.city,
+        state: i.state,
+      }));
     } catch (error) {
       this.logger.error('Failed to get institution suggestions', error);
       return [];

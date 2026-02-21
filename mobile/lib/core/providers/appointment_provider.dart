@@ -140,19 +140,22 @@ class AppointmentNotifier extends StateNotifier<AppointmentState> {
       state = state.copyWith(
         appointments: state.appointments
             .map((a) => a.id == appointmentId
-                ? AppointmentModel.fromJson({
-                    ...{
-                      'id': a.id,
-                      'patientId': a.patientId,
-                      'doctorId': a.doctorId,
-                      'workplaceId': a.workplaceId,
-                      'scheduledAt': a.scheduledAt.toIso8601String(),
-                      'durationMin': a.durationMin,
-                      'type': a.type,
-                      'status': 'CANCELLED_BY_PATIENT',
-                      'reason': a.reason,
-                    },
-                  })
+                ? AppointmentModel(
+                    id: a.id,
+                    patientId: a.patientId,
+                    doctorId: a.doctorId,
+                    workplaceId: a.workplaceId,
+                    scheduledAt: a.scheduledAt,
+                    durationMin: a.durationMin,
+                    type: a.type,
+                    status: 'CANCELLED_BY_PATIENT',
+                    reason: a.reason,
+                    notes: a.notes,
+                    cancelledAt: DateTime.now(),
+                    cancelReason: reason,
+                    doctor: a.doctor,
+                    workplace: a.workplace,
+                  )
                 : a)
             .toList(),
       );

@@ -13,10 +13,13 @@ class SearchResult {
     return SearchResult(
       answer: json['answer'] ?? json['response'] ?? '',
       results: (json['results'] as List?)
-              ?.map((e) => SearchResultItem.fromJson(e))
+              ?.whereType<Map>()
+              .map((e) => SearchResultItem.fromJson(Map<String, dynamic>.from(e)))
               .toList() ??
           [],
-      toolsUsed: (json['toolsUsed'] as List?)?.cast<String>(),
+      toolsUsed: (json['toolsUsed'] as List?)
+          ?.whereType<String>()
+          .toList(),
     );
   }
 }
@@ -37,12 +40,17 @@ class SearchResultItem {
   });
 
   factory SearchResultItem.fromJson(Map<String, dynamic> json) {
+    final rawData = json['data'];
     return SearchResultItem(
       type: json['type'] ?? 'unknown',
-      id: json['id'] ?? '',
+      id: json['id']?.toString() ?? '',
       title: json['title'] ?? json['name'] ?? '',
       subtitle: json['subtitle'] ?? json['description'],
-      data: json['data'] ?? json,
+      data: rawData is Map<String, dynamic>
+          ? rawData
+          : rawData is Map
+              ? Map<String, dynamic>.from(rawData)
+              : null,
     );
   }
 }

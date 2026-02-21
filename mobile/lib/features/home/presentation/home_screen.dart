@@ -1,194 +1,194 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../../core/theme/app_theme.dart';
 import '../../../core/providers/auth_provider.dart';
+import '../../../core/providers/feed_provider.dart';
 import '../../feed/presentation/feed_screen.dart';
 
-class HomeScreen extends ConsumerStatefulWidget {
+class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
   @override
-  ConsumerState<HomeScreen> createState() => _HomeScreenState();
-}
-
-class _HomeScreenState extends ConsumerState<HomeScreen> {
-  @override
-  Widget build(BuildContext context) {
-    final user = ref.watch(authProvider).user;
-
+  Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: Colors.white,
       body: SafeArea(
-        child: CustomScrollView(
-          slivers: [
-            // Header minimalista
-            SliverToBoxAdapter(
-              child: _buildHeader(user?.fullName?.split(' ').first ?? 'Doutor'),
-            ),
-            // Feed de posts
-            const SliverFillRemaining(
-              child: FeedScreen(),
-            ),
+        child: Column(
+          children: [
+            // Sticky header
+            _StickyHeader(),
+            const Divider(height: 1, color: Color(0xFFEFF3F4)),
+            // Compose box
+            _ComposeBox(),
+            const Divider(height: 1, color: Color(0xFFEFF3F4)),
+            // Feed
+            const Expanded(child: FeedScreen()),
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showCreatePostSheet(context),
-        backgroundColor: AppColors.primary,
-        icon: const Icon(Icons.add, size: 20),
-        label: const Text('Novo Post'),
-        elevation: 0,
-      ),
-    );
-  }
-
-  Widget _buildHeader(String firstName) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Olá, $firstName',
-                style: AppTextStyles.headingMedium,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Bem-vindo de volta',
-                style: AppTextStyles.bodySmall,
-              ),
-            ],
-          ),
-          Row(
-            children: [
-              _buildIconButton(
-                Icons.notifications_outlined,
-                onTap: () => context.push('/notifications'),
-              ),
-              const SizedBox(width: 8),
-              _buildAvatar(),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildIconButton(IconData icon, {required VoidCallback onTap}) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 44,
-        height: 44,
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.border),
-        ),
-        child: Icon(
-          icon,
-          size: 20,
-          color: AppColors.textSecondary,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAvatar() {
-    return GestureDetector(
-      onTap: () => context.push('/profile'),
-      child: Container(
-        width: 44,
-        height: 44,
-        decoration: BoxDecoration(
-          color: AppColors.primaryLight,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: const Icon(
-          Icons.person,
-          size: 20,
-          color: AppColors.primary,
-        ),
-      ),
-    );
-  }
-
-  void _showCreatePostSheet(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => const CreatePostSheet(),
     );
   }
 }
 
-class CreatePostSheet extends StatelessWidget {
-  const CreatePostSheet({super.key});
+// ─── Sticky Header ────────────────────────────────────────────────────────────
+
+class _StickyHeader extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        children: [
+          const Text(
+            'Feed',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF0F1419),
+            ),
+          ),
+          const Spacer(),
+          IconButton(
+            icon: const Icon(Icons.notifications_outlined,
+                color: Color(0xFF536471)),
+            onPressed: () => context.push('/notifications'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Compose Box ─────────────────────────────────────────────────────────────
+
+class _ComposeBox extends ConsumerStatefulWidget {
+  @override
+  ConsumerState<_ComposeBox> createState() => _ComposeBoxState();
+}
+
+class _ComposeBoxState extends ConsumerState<_ComposeBox> {
+  final _controller = TextEditingController();
+  bool _hasText = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addListener(() {
+      final hasText = _controller.text.trim().isNotEmpty;
+      if (hasText != _hasText) setState(() => _hasText = hasText);
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _publish() async {
+    final content = _controller.text.trim();
+    if (content.isEmpty) return;
+
+    final ok = await ref.read(feedProvider.notifier).createPost(content);
+    if (ok && mounted) {
+      _controller.clear();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+    final user = ref.watch(authProvider).user;
+    final isCreating = ref.watch(feedProvider).isCreating;
+    final initials = _initials(user?.fullName ?? '');
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Handle
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppColors.border,
-                borderRadius: BorderRadius.circular(2),
+          CircleAvatar(
+            radius: 20,
+            backgroundColor: const Color(0xFFE8F5E9),
+            child: Text(
+              initials,
+              style: const TextStyle(
+                color: Color(0xFF1B5E20),
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
               ),
             ),
           ),
-          const SizedBox(height: 24),
-          Text(
-            'Criar Publicação',
-            style: AppTextStyles.headingSmall,
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            maxLines: 4,
-            decoration: InputDecoration(
-              hintText: 'O que você está pensando?',
-              filled: true,
-              fillColor: AppColors.background,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide.none,
-              ),
-              contentPadding: const EdgeInsets.all(16),
-            ),
-          ),
-          const SizedBox(height: 16),
-          // Attachment buttons
-          Row(
-            children: [
-              _buildAttachmentButton(Icons.image, 'Foto'),
-              const SizedBox(width: 8),
-              _buildAttachmentButton(Icons.link, 'Link'),
-              const SizedBox(width: 8),
-              _buildAttachmentButton(Icons.poll, 'Enquete'),
-            ],
-          ),
-          const SizedBox(height: 20),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Publicar'),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                TextField(
+                  controller: _controller,
+                  maxLines: null,
+                  minLines: 1,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    color: Color(0xFF0F1419),
+                  ),
+                  decoration: const InputDecoration(
+                    hintText: 'O que está acontecendo?',
+                    hintStyle: TextStyle(
+                      fontSize: 18,
+                      color: Color(0xFF536471),
+                    ),
+                    border: InputBorder.none,
+                    isDense: true,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // Attachment icons
+                    Row(
+                      children: [
+                        _attachIcon(Icons.image_outlined),
+                        _attachIcon(Icons.gif_box_outlined),
+                        _attachIcon(Icons.poll_outlined),
+                        _attachIcon(Icons.emoji_emotions_outlined),
+                      ],
+                    ),
+                    // Publish button
+                    FilledButton(
+                      onPressed: _hasText && !isCreating ? _publish : null,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF1D9BF0),
+                        disabledBackgroundColor: const Color(0xFF1D9BF0).withOpacity(0.5),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 18, vertical: 8),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: isCreating
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Text(
+                              'Publicar',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 15,
+                              ),
+                            ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
         ],
@@ -196,19 +196,22 @@ class CreatePostSheet extends StatelessWidget {
     );
   }
 
-  Widget _buildAttachmentButton(IconData icon, String label) {
-    return Expanded(
-      child: OutlinedButton.icon(
+  Widget _attachIcon(IconData icon) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 4),
+      child: IconButton(
+        icon: Icon(icon, size: 20, color: const Color(0xFF1D9BF0)),
         onPressed: () {},
-        icon: Icon(icon, size: 18),
-        label: Text(label),
-        style: OutlinedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-        ),
+        constraints: const BoxConstraints(),
+        padding: const EdgeInsets.all(6),
       ),
     );
+  }
+
+  String _initials(String name) {
+    final parts = name.trim().split(' ').where((p) => p.isNotEmpty).toList();
+    if (parts.isEmpty) return '?';
+    if (parts.length == 1) return parts[0][0].toUpperCase();
+    return '${parts[0][0]}${parts.last[0]}'.toUpperCase();
   }
 }
