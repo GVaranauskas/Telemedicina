@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import * as crypto from 'crypto';
 import { Neo4jService } from '../../../database/neo4j/neo4j.service';
 import { PrismaService } from '../../../database/prisma/prisma.service';
 import { LLMFactory } from '../llm/llm.factory';
@@ -40,6 +41,12 @@ export class SearchAgent {
       },
     ];
 
+    // Track all tool_use IDs across iterations to ensure uniqueness.
+    // The Claude API requires every tool_use id to be unique across the
+    // entire conversation — duplicates from provider fallback or successive
+    // iterations cause a 400 "tool_use ids must be unique" error.
+    const usedToolUseIds = new Set<string>();
+
     // Agent loop — uses chatWithFallback for automatic provider failover
     for (let i = 0; i < MAX_ITERATIONS; i++) {
       this.logger.log(`Agent iteration ${i + 1}/${MAX_ITERATIONS}`);
@@ -50,6 +57,21 @@ export class SearchAgent {
         return { answer: response.content || 'Sem resultados encontrados.', sources };
       }
 
+      // Deduplicate tool_use IDs: if a provider returns an ID that was
+      // already used in a previous iteration, replace it with a new one.
+      const idMap = new Map<string, string>(); // original → resolved
+      for (const tc of response.toolCalls) {
+        let resolvedId = tc.id;
+        if (!resolvedId || usedToolUseIds.has(resolvedId)) {
+          resolvedId = `toolu_${crypto.randomUUID().replace(/-/g, '')}`;
+          this.logger.warn(
+            `Duplicate/missing tool_use id "${tc.id}" replaced with "${resolvedId}"`,
+          );
+        }
+        usedToolUseIds.add(resolvedId);
+        idMap.set(tc.id, resolvedId);
+      }
+
       // Process each tool call - include tool_use blocks for Claude compatibility
       const assistantContent: any[] = [];
       if (response.content) {
@@ -58,7 +80,7 @@ export class SearchAgent {
       for (const tc of response.toolCalls) {
         assistantContent.push({
           type: 'tool_use',
-          id: tc.id,
+          id: idMap.get(tc.id)!,
           name: tc.name,
           input: tc.arguments,
         });
@@ -71,6 +93,7 @@ export class SearchAgent {
       });
 
       for (const toolCall of response.toolCalls) {
+        const resolvedId = idMap.get(toolCall.id)!;
         this.logger.log(`Executing tool: ${toolCall.name} with args: ${JSON.stringify(toolCall.arguments)}`);
         const toolResult = await this.executeTool(toolCall);
         sources.push({
@@ -89,7 +112,7 @@ export class SearchAgent {
         messages.push({
           role: 'tool',
           content: JSON.stringify(truncatedResult),
-          toolCallId: toolCall.id,
+          toolCallId: resolvedId,
           name: toolCall.name,
         });
       }
