@@ -116,6 +116,14 @@ export class ScyllaSetupService implements OnModuleInit {
         PRIMARY KEY (user_id, last_message_at, chat_id)
       ) WITH CLUSTERING ORDER BY (last_message_at DESC, chat_id ASC)`,
 
+      // Bookmarks
+      `CREATE TABLE IF NOT EXISTS bookmarks_by_user (
+        user_id text,
+        bookmarked_at timestamp,
+        post_id text,
+        PRIMARY KEY (user_id, bookmarked_at, post_id)
+      ) WITH CLUSTERING ORDER BY (bookmarked_at DESC, post_id ASC)`,
+
       // Notifications
       `CREATE TABLE IF NOT EXISTS notifications_by_user (
         user_id text,

@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../network/api_client.dart';
+import '../network/websocket_service.dart';
 import '../repositories/auth_repository.dart';
 import '../repositories/doctor_repository.dart';
 import '../repositories/feed_repository.dart';
@@ -8,6 +9,7 @@ import '../repositories/job_repository.dart';
 import '../repositories/chat_repository.dart';
 import '../repositories/notification_repository.dart';
 import '../repositories/search_repository.dart';
+import '../repositories/graph_repository.dart';
 
 // ─── Core ─────────────────────────────────────────────────────
 final apiClientProvider = Provider<ApiClient>((ref) => ApiClient());
@@ -36,3 +38,10 @@ final notificationRepositoryProvider = Provider<NotificationRepository>(
 
 final searchRepositoryProvider = Provider<SearchRepository>(
     (ref) => SearchRepository(ref.watch(apiClientProvider)));
+
+final graphRepositoryProvider = Provider<GraphRepository>(
+    (ref) => GraphRepository(ref.watch(apiClientProvider)));
+
+// ─── WebSocket ────────────────────────────────────────────────
+final webSocketServiceProvider =
+    Provider<WebSocketService>((ref) => WebSocketService());

@@ -346,4 +346,57 @@ export class FeedService {
       updatedAt: row.updated_at,
     };
   }
+
+  // ─── Bookmarks ────────────────────────────────────────────────
+
+  async bookmarkPost(postId: string, userId: string) {
+    const now = new Date();
+    await this.scylla.execute(
+      `INSERT INTO bookmarks_by_user (user_id, bookmarked_at, post_id) VALUES (?, ?, ?)`,
+      [userId, now, postId],
+    );
+    return { status: 'bookmarked' };
+  }
+
+  async unbookmarkPost(postId: string, userId: string) {
+    // To delete from ScyllaDB we need the full primary key including bookmarked_at
+    // First find the bookmark
+    const result = await this.scylla.execute(
+      `SELECT bookmarked_at FROM bookmarks_by_user WHERE user_id = ? AND post_id = ? ALLOW FILTERING`,
+      [userId, postId],
+    );
+    if (result.rows.length > 0) {
+      await this.scylla.execute(
+        `DELETE FROM bookmarks_by_user WHERE user_id = ? AND bookmarked_at = ? AND post_id = ?`,
+        [userId, result.rows[0].bookmarked_at, postId],
+      );
+    }
+    return { status: 'unbookmarked' };
+  }
+
+  async getBookmarks(userId: string, limit = 20) {
+    const result = await this.scylla.execute(
+      `SELECT post_id FROM bookmarks_by_user WHERE user_id = ? LIMIT ?`,
+      [userId, limit],
+    );
+
+    const posts = [];
+    for (const row of result.rows) {
+      try {
+        const post = await this.getPostById(row.post_id);
+        if (post) posts.push({ ...post, isBookmarked: true });
+      } catch {
+        // Post may have been deleted
+      }
+    }
+    return posts;
+  }
+
+  async isBookmarked(postId: string, userId: string): Promise<boolean> {
+    const result = await this.scylla.execute(
+      `SELECT post_id FROM bookmarks_by_user WHERE user_id = ? AND post_id = ? ALLOW FILTERING`,
+      [userId, postId],
+    );
+    return result.rows.length > 0;
+  }
 }

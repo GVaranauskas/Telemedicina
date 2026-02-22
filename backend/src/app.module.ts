@@ -24,6 +24,7 @@ import { JobModule } from './modules/job/job.module';
 import { ChatModule } from './modules/chat/chat.module';
 import { NotificationModule } from './modules/notification/notification.module';
 import { AgenticSearchModule } from './modules/agentic-search/agentic-search.module';
+import { GraphInsightsModule } from './modules/graph-insights/graph-insights.module';
 import { EventsModule } from './events/events.module';
 
 @Module({
@@ -59,6 +60,7 @@ import { EventsModule } from './events/events.module';
     ChatModule,
     NotificationModule,
     AgenticSearchModule,
+    GraphInsightsModule,
     EventsModule,
   ],
 })

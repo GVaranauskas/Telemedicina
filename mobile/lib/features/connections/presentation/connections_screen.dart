@@ -82,6 +82,7 @@ class _ConnectionsScreenState extends ConsumerState<ConnectionsScreen> {
           return Card(
             margin: const EdgeInsets.only(bottom: 8),
             child: ListTile(
+              onTap: () => context.push('/doctor/${conn.id}'),
               leading: CircleAvatar(
                 backgroundColor: AppColors.primaryLight,
                 backgroundImage: conn.profilePicUrl != null
@@ -103,7 +104,10 @@ class _ConnectionsScreenState extends ConsumerState<ConnectionsScreen> {
               trailing: IconButton(
                 icon: const Icon(Icons.message_outlined,
                     color: AppColors.primary),
-                onPressed: () {},
+                onPressed: () => context.push('/chat/${conn.id}', extra: {
+                  'otherUserName': conn.fullName,
+                  'otherUserId': conn.id,
+                }),
               ),
             ),
           );
@@ -126,16 +130,19 @@ class _ConnectionsScreenState extends ConsumerState<ConnectionsScreen> {
         final req = requests[index];
         return Card(
           margin: const EdgeInsets.only(bottom: 8),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  backgroundColor: AppColors.primaryLight,
-                  child: Text(req.sender.fullName.isNotEmpty
-                      ? req.sender.fullName[0].toUpperCase()
-                      : '?'),
-                ),
+          child: InkWell(
+            onTap: () => context.push('/doctor/${req.sender.id}'),
+            borderRadius: BorderRadius.circular(12),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    backgroundColor: AppColors.primaryLight,
+                    child: Text(req.sender.fullName.isNotEmpty
+                        ? req.sender.fullName[0].toUpperCase()
+                        : '?'),
+                  ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -167,6 +174,7 @@ class _ConnectionsScreenState extends ConsumerState<ConnectionsScreen> {
                   child: const Text('Rejeitar'),
                 ),
               ],
+              ),
             ),
           ),
         );
@@ -188,16 +196,19 @@ class _ConnectionsScreenState extends ConsumerState<ConnectionsScreen> {
         final sug = suggestions[index];
         return Card(
           margin: const EdgeInsets.only(bottom: 8),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  backgroundColor: AppColors.primaryLight,
-                  child: Text(sug.fullName.isNotEmpty
-                      ? sug.fullName[0].toUpperCase()
-                      : '?'),
-                ),
+          child: InkWell(
+            onTap: () => context.push('/doctor/${sug.doctorId}'),
+            borderRadius: BorderRadius.circular(12),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    backgroundColor: AppColors.primaryLight,
+                    child: Text(sug.fullName.isNotEmpty
+                        ? sug.fullName[0].toUpperCase()
+                        : '?'),
+                  ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -224,6 +235,7 @@ class _ConnectionsScreenState extends ConsumerState<ConnectionsScreen> {
                   label: const Text('Conectar'),
                 ),
               ],
+              ),
             ),
           ),
         );

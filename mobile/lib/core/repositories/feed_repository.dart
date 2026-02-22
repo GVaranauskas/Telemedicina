@@ -63,4 +63,19 @@ class FeedRepository {
     final list = response.data as List? ?? [];
     return list.map((e) => PostModel.fromJson(e)).toList();
   }
+
+  Future<void> bookmarkPost(String postId) async {
+    await _api.dio.post('/feed/posts/$postId/bookmark');
+  }
+
+  Future<void> unbookmarkPost(String postId) async {
+    await _api.dio.delete('/feed/posts/$postId/bookmark');
+  }
+
+  Future<List<PostModel>> getBookmarks({int limit = 20}) async {
+    final response = await _api.dio
+        .get('/feed/bookmarks', queryParameters: {'limit': limit});
+    final list = response.data as List? ?? [];
+    return list.map((e) => PostModel.fromJson(e)).toList();
+  }
 }

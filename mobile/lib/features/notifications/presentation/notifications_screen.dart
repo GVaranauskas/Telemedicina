@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import '../../../core/theme/app_theme.dart';
 import '../../../core/providers/notification_provider.dart';
@@ -72,17 +73,49 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
       child: ListView.builder(
         padding: const EdgeInsets.all(16),
         itemCount: state.notifications.length,
-        itemBuilder: (context, index) => _buildNotificationTile(state.notifications[index]),
+        itemBuilder: (context, index) => _buildNotificationTile(state.notifications[index], index),
       ),
     );
   }
 
-  Widget _buildNotificationTile(NotificationModel notification) {
+  void _onNotificationTap(NotificationModel notification, int index) {
+    ref.read(notificationProvider.notifier).markAsRead(index);
+
+    final data = notification.data;
+    switch (notification.type) {
+      case 'POST_LIKED':
+      case 'POST_COMMENTED':
+        final postId = data?['postId'];
+        if (postId != null) context.push('/post/$postId');
+        break;
+      case 'CONNECTION_REQUEST':
+      case 'CONNECTION_ACCEPTED':
+        final doctorId = data?['doctorId'] ?? data?['senderId'];
+        if (doctorId != null) context.push('/doctor/$doctorId');
+        break;
+      case 'MESSAGE':
+        final chatId = data?['chatId'];
+        if (chatId != null) {
+          context.push('/chat/$chatId', extra: {
+            'otherUserName': notification.title,
+            'otherUserId': data?['senderId'] ?? '',
+          });
+        }
+        break;
+      case 'JOB_CREATED':
+        context.go('/jobs');
+        break;
+    }
+  }
+
+  Widget _buildNotificationTile(NotificationModel notification, int index) {
     final iconData = _iconForType(notification.type);
     final color = _colorForType(notification.type);
     final isUnread = !notification.isRead;
 
-    return Container(
+    return GestureDetector(
+      onTap: () => _onNotificationTap(notification, index),
+      child: Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -142,6 +175,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
               ),
             ),
         ],
+      ),
       ),
     );
   }

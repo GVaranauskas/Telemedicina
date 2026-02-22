@@ -386,7 +386,9 @@ class _SmartSearchScreenState extends ConsumerState<SmartSearchScreen> {
           Icons.medical_services,
           AppColors.primary,
           'Ver Perfil',
-          () => context.push('/search?query=${Uri.encodeComponent(item.title)}'),
+          () => item.id.isNotEmpty
+              ? context.push('/doctor/${item.id}')
+              : context.push('/search?query=${Uri.encodeComponent(item.title)}'),
         );
       case 'job':
       case 'vaga':

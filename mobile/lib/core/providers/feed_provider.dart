@@ -91,6 +91,21 @@ class FeedNotifier extends StateNotifier<FeedState> {
       state = state.copyWith(posts: updated);
     } catch (_) {}
   }
+
+  Future<void> bookmarkPost(int index) async {
+    if (index >= state.posts.length) return;
+    final post = state.posts[index];
+    try {
+      if (post.isBookmarked) {
+        await _repo.unbookmarkPost(post.postId);
+      } else {
+        await _repo.bookmarkPost(post.postId);
+      }
+      final updated = List<PostModel>.from(state.posts);
+      updated[index].isBookmarked = !post.isBookmarked;
+      state = state.copyWith(posts: updated);
+    } catch (_) {}
+  }
 }
 
 // ─── Provider ─────────────────────────────────────────────────

@@ -55,6 +55,25 @@ class NotificationNotifier extends StateNotifier<NotificationState> {
           isLoading: false, error: 'Erro ao carregar notificações');
     }
   }
+
+  Future<void> markAsRead(int index) async {
+    if (index >= state.notifications.length) return;
+    final notification = state.notifications[index];
+    if (notification.isRead) return;
+
+    try {
+      await _repo.markAsRead(
+        notification.notificationId,
+        notification.createdAt.toIso8601String(),
+      );
+      final updated = List<NotificationModel>.from(state.notifications);
+      updated[index].isRead = true;
+      state = state.copyWith(
+        notifications: updated,
+        unreadCount: (state.unreadCount - 1).clamp(0, state.unreadCount),
+      );
+    } catch (_) {}
+  }
 }
 
 // ─── Provider ─────────────────────────────────────────────────

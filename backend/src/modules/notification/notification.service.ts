@@ -76,6 +76,17 @@ export class NotificationService {
     return Number(result.rows[0]?.count || 0);
   }
 
+  async markAsRead(
+    userId: string,
+    notificationId: string,
+    createdAt: string,
+  ) {
+    await this.scylla.execute(
+      `UPDATE notifications_by_user SET is_read = true WHERE user_id = ? AND created_at = ? AND notification_id = ?`,
+      [userId, new Date(createdAt), notificationId],
+    );
+  }
+
   // ─── Event-driven notifications ─────────────────────────────
 
   @OnEvent(EVENTS.CONNECTION_CREATED)

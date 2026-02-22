@@ -17,4 +17,10 @@ class NotificationRepository {
     final response = await _api.dio.get('/notifications/unread-count');
     return response.data['unreadCount'] ?? 0;
   }
+
+  Future<void> markAsRead(String notificationId, String createdAt) async {
+    await _api.dio.patch('/notifications/$notificationId/read', data: {
+      'createdAt': createdAt,
+    });
+  }
 }

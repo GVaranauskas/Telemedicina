@@ -11,6 +11,7 @@ class PostModel {
   final int commentCount;
   final DateTime createdAt;
   bool isLiked;
+  bool isBookmarked;
 
   PostModel({
     required this.postId,
@@ -25,6 +26,7 @@ class PostModel {
     this.commentCount = 0,
     required this.createdAt,
     this.isLiked = false,
+    this.isBookmarked = false,
   });
 
   factory PostModel.fromJson(Map<String, dynamic> json) {
@@ -47,6 +49,7 @@ class PostModel {
               ? DateTime.parse(json['createdAt'].toString())
               : DateTime.now(),
       isLiked: json['is_liked'] ?? json['isLiked'] ?? false,
+      isBookmarked: json['is_bookmarked'] ?? json['isBookmarked'] ?? false,
     );
   }
 }

@@ -96,6 +96,18 @@ class ConnectionNotifier extends StateNotifier<ConnectionState> {
       state = state.copyWith(connections: updated);
     } catch (_) {}
   }
+
+  Future<void> follow(String targetId) async {
+    try {
+      await _repo.follow(targetId);
+    } catch (_) {}
+  }
+
+  Future<void> unfollow(String targetId) async {
+    try {
+      await _repo.unfollow(targetId);
+    } catch (_) {}
+  }
 }
 
 // ─── Provider ─────────────────────────────────────────────────

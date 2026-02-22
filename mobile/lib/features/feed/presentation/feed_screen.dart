@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import '../../../core/providers/feed_provider.dart';
 import '../../../core/models/post_model.dart';
@@ -154,22 +155,25 @@ class _PostState extends ConsumerState<_Post> {
     final avatarColor = _avatarColor(post.authorId);
 
     return InkWell(
-      onTap: () {},
+      onTap: () => context.push('/post/${post.postId}'),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Avatar
-            CircleAvatar(
-              radius: 20,
-              backgroundColor: avatarColor.withOpacity(0.15),
-              child: Text(
-                initials,
-                style: TextStyle(
-                  color: avatarColor,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
+            GestureDetector(
+              onTap: () => context.push('/doctor/${post.authorId}'),
+              child: CircleAvatar(
+                radius: 20,
+                backgroundColor: avatarColor.withOpacity(0.15),
+                child: Text(
+                  initials,
+                  style: TextStyle(
+                    color: avatarColor,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
                 ),
               ),
             ),
@@ -183,14 +187,17 @@ class _PostState extends ConsumerState<_Post> {
                   Row(
                     children: [
                       Expanded(
-                        child: Text(
-                          post.authorName,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 15,
-                            color: Color(0xFF0F1419),
+                        child: GestureDetector(
+                          onTap: () => context.push('/doctor/${post.authorId}'),
+                          child: Text(
+                            post.authorName,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 15,
+                              color: Color(0xFF0F1419),
+                            ),
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       const SizedBox(width: 4),
@@ -260,16 +267,20 @@ class _PostState extends ConsumerState<_Post> {
                         count: post.commentCount,
                         isActive: false,
                         activeColor: const Color(0xFF1D9BF0),
-                        onTap: () {},
+                        onTap: () => context.push('/post/${post.postId}'),
                       ),
                       const SizedBox(width: 32),
                       _ActionBtn(
-                        icon: Icons.repeat_rounded,
-                        activeIcon: Icons.repeat_rounded,
+                        icon: Icons.ios_share_outlined,
+                        activeIcon: Icons.ios_share_outlined,
                         count: 0,
                         isActive: false,
                         activeColor: const Color(0xFF00BA7C),
-                        onTap: () {},
+                        onTap: () {
+                          SharePlus.instance.share(
+                            ShareParams(text: '${post.authorName}: ${post.content}'),
+                          );
+                        },
                       ),
                       const SizedBox(width: 32),
                       _ActionBtn(
@@ -285,9 +296,12 @@ class _PostState extends ConsumerState<_Post> {
                       ),
                       const Spacer(),
                       GestureDetector(
-                        onTap: () {},
-                        child: const Icon(Icons.ios_share_outlined,
-                            size: 18, color: Color(0xFF536471)),
+                        onTap: () => ref.read(feedProvider.notifier).bookmarkPost(widget.index),
+                        child: Icon(
+                          post.isBookmarked ? Icons.bookmark_rounded : Icons.bookmark_outline_rounded,
+                          size: 20,
+                          color: post.isBookmarked ? const Color(0xFF1D9BF0) : const Color(0xFF536471),
+                        ),
                       ),
                     ],
                   ),
