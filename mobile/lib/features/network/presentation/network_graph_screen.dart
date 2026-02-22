@@ -5,6 +5,7 @@ import 'package:graphview/GraphView.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/providers/connection_provider.dart';
+import '../../../core/providers/api_provider.dart';
 import '../../../core/models/connection_model.dart';
 
 // ─── Specialty colors for node visualization ──────────────────────────────
@@ -47,11 +48,55 @@ class _NetworkGraphScreenState extends ConsumerState<NetworkGraphScreen>
   String? _selectedNodeId;
   ConnectionModel? _selectedConnection;
 
+  // Insights data
+  List<Map<String, dynamic>> _influential = [];
+  List<Map<String, dynamic>> _communities = [];
+  List<Map<String, dynamic>> _similarDoctors = [];
+  bool _insightsLoading = false;
+  String? _insightsError;
+
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-    Future.microtask(() => ref.read(connectionProvider.notifier).loadAll());
+    _tabController = TabController(length: 3, vsync: this);
+    Future.microtask(() {
+      ref.read(connectionProvider.notifier).loadAll();
+      _loadInsights();
+    });
+  }
+
+  Future<void> _loadInsights() async {
+    setState(() {
+      _insightsLoading = true;
+      _insightsError = null;
+    });
+    try {
+      final graphRepo = ref.read(graphRepositoryProvider);
+      final userId = ref.read(authProvider).user?.doctorId;
+      final results = await Future.wait([
+        graphRepo.getInfluentialDoctors(limit: 10),
+        graphRepo.getCommunities(),
+        if (userId != null)
+          graphRepo.getSimilarDoctors(userId, limit: 10)
+        else
+          Future.value(<Map<String, dynamic>>[]),
+      ]);
+      if (mounted) {
+        setState(() {
+          _influential = results[0];
+          _communities = results[1];
+          _similarDoctors = results[2];
+          _insightsLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _insightsLoading = false;
+          _insightsError = 'Não foi possível carregar insights';
+        });
+      }
+    }
   }
 
   @override
@@ -91,9 +136,11 @@ class _NetworkGraphScreenState extends ConsumerState<NetworkGraphScreen>
         ],
         bottom: TabBar(
           controller: _tabController,
+          isScrollable: true,
           tabs: const [
             Tab(text: 'Grafo Visual', icon: Icon(Icons.hub, size: 16)),
             Tab(text: 'Estatísticas', icon: Icon(Icons.bar_chart, size: 16)),
+            Tab(text: 'Insights', icon: Icon(Icons.auto_graph, size: 16)),
           ],
         ),
       ),
@@ -102,6 +149,7 @@ class _NetworkGraphScreenState extends ConsumerState<NetworkGraphScreen>
         children: [
           _buildGraphTab(),
           _buildStatsTab(),
+          _buildInsightsTab(),
         ],
       ),
     );
@@ -432,6 +480,11 @@ class _NetworkGraphScreenState extends ConsumerState<NetworkGraphScreen>
                     ),
                 ],
               ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.person_outlined),
+              tooltip: 'Ver Perfil',
+              onPressed: () => context.push('/doctor/${conn.id}'),
             ),
             IconButton(
               icon: const Icon(Icons.message_outlined),
@@ -769,6 +822,345 @@ class _NetworkGraphScreenState extends ConsumerState<NetworkGraphScreen>
           ),
         ),
       ),
+    );
+  }
+
+  // ─── Insights Tab ──────────────────────────────────────────────────────────
+
+  Widget _buildInsightsTab() {
+    if (_insightsLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_insightsError != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.auto_graph, size: 48, color: Colors.grey),
+            const SizedBox(height: 16),
+            Text(_insightsError!, style: TextStyle(color: AppColors.textSecondary)),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: _loadInsights,
+              child: const Text('Tentar novamente'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_influential.isEmpty && _communities.isEmpty && _similarDoctors.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.auto_graph, size: 64, color: AppColors.primary.withOpacity(0.3)),
+              const SizedBox(height: 16),
+              const Text(
+                'Insights indisponíveis',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Os algoritmos de grafo ainda não processaram dados suficientes. '
+                'Conecte-se com mais médicos para gerar insights.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: AppColors.textSecondary),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadInsights,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Influential Doctors
+            if (_influential.isNotEmpty) ...[
+              _buildSectionHeader(
+                'Médicos Influentes',
+                'Ranqueados por PageRank — importância na rede',
+                Icons.stars_rounded,
+                const Color(0xFFFF7A00),
+              ),
+              const SizedBox(height: 12),
+              ..._influential.asMap().entries.map((entry) {
+                final i = entry.key;
+                final doc = entry.value;
+                final rank = i + 1;
+                final specialties = (doc['specialties'] as List?)
+                    ?.cast<String>()
+                    .take(2)
+                    .join(', ') ?? '';
+                final pageRank = (doc['pageRank'] as num?)?.toDouble() ?? 0;
+
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: rank <= 3
+                          ? const Color(0xFFFF7A00)
+                          : AppColors.primary,
+                      child: Text(
+                        '$rank',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    title: Text(
+                      doc['name'] ?? '?',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (specialties.isNotEmpty)
+                          Text(specialties, style: const TextStyle(fontSize: 12)),
+                        Text(
+                          'PageRank: ${pageRank.toStringAsFixed(4)}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () {
+                      final id = doc['id'];
+                      if (id != null) context.push('/doctor/$id');
+                    },
+                  ),
+                );
+              }),
+              const SizedBox(height: 24),
+            ],
+
+            // Communities
+            if (_communities.isNotEmpty) ...[
+              _buildSectionHeader(
+                'Comunidades',
+                'Clusters detectados pelo algoritmo Louvain',
+                Icons.groups_rounded,
+                const Color(0xFF7856FF),
+              ),
+              const SizedBox(height: 12),
+              ..._communities.asMap().entries.map((entry) {
+                final i = entry.key;
+                final community = entry.value;
+                final memberCount = community['memberCount'] ?? 0;
+                final topMembers = (community['topMembers'] as List?) ?? [];
+                final communityColors = [
+                  const Color(0xFF7856FF),
+                  const Color(0xFF1D9BF0),
+                  const Color(0xFF00BA7C),
+                  const Color(0xFFF91880),
+                  const Color(0xFFFF7A00),
+                ];
+                final color = communityColors[i % communityColors.length];
+
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              width: 12,
+                              height: 12,
+                              decoration: BoxDecoration(
+                                color: color,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Comunidade ${i + 1}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                              ),
+                            ),
+                            const Spacer(),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: color.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                '$memberCount membros',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: color,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (topMembers.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: topMembers.map<Widget>((member) {
+                              final name = member['name'] ?? '?';
+                              final id = member['id'];
+                              return ActionChip(
+                                label: Text(name, style: const TextStyle(fontSize: 12)),
+                                avatar: CircleAvatar(
+                                  radius: 12,
+                                  backgroundColor: color,
+                                  child: Text(
+                                    name.isNotEmpty ? name[0].toUpperCase() : '?',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                    ),
+                                  ),
+                                ),
+                                onPressed: () {
+                                  if (id != null) context.push('/doctor/$id');
+                                },
+                              );
+                            }).toList(),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                );
+              }),
+              const SizedBox(height: 24),
+            ],
+
+            // Similar Doctors
+            if (_similarDoctors.isNotEmpty) ...[
+              _buildSectionHeader(
+                'Médicos Similares a Você',
+                'Baseado em conexões e interesses compartilhados',
+                Icons.people_alt_rounded,
+                const Color(0xFF1D9BF0),
+              ),
+              const SizedBox(height: 12),
+              ..._similarDoctors.map((doc) {
+                final specialties = (doc['specialties'] as List?)
+                    ?.cast<String>()
+                    .take(2)
+                    .join(', ') ?? '';
+                final similarity = (doc['similarity'] as num?)?.toDouble() ?? 0;
+                final percent = (similarity * 100).toStringAsFixed(0);
+
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: const Color(0xFF1D9BF0),
+                      child: Text(
+                        (doc['name'] ?? '?')[0].toUpperCase(),
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                    ),
+                    title: Text(
+                      doc['name'] ?? '?',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (specialties.isNotEmpty)
+                          Text(specialties, style: const TextStyle(fontSize: 12)),
+                        Row(
+                          children: [
+                            SizedBox(
+                              width: 60,
+                              child: LinearProgressIndicator(
+                                value: similarity,
+                                backgroundColor: const Color(0xFF1D9BF0).withOpacity(0.1),
+                                valueColor: const AlwaysStoppedAnimation(Color(0xFF1D9BF0)),
+                                minHeight: 4,
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              '$percent% similar',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: Color(0xFF1D9BF0),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () {
+                      final id = doc['id'];
+                      if (id != null) context.push('/doctor/$id');
+                    },
+                  ),
+                );
+              }),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(String title, String subtitle, IconData icon, Color color) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, color: color, size: 20),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+              Text(
+                subtitle,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

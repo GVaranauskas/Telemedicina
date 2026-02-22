@@ -269,6 +269,40 @@ export class ConnectionService {
       }
     }
 
+    // Strategy 2.5: GDS Node Similarity (SIMILAR_TO edges)
+    if (results.length < limit) {
+      try {
+        const remaining = limit - results.length;
+        const similarSuggestions = await this.neo4j.read<any>(
+          `MATCH (me:Doctor {pgId: $doctorId})-[s:SIMILAR_TO]->(suggestion:Doctor)
+           WHERE NOT (me)-[:CONNECTED_TO]->(suggestion)
+             AND NOT suggestion.pgId IN $existingIds
+           OPTIONAL MATCH (suggestion)-[:SPECIALIZES_IN]->(spec:Specialty)
+           WITH suggestion, s.score AS similarity, collect(spec.name) AS specialties
+           ORDER BY similarity DESC
+           LIMIT toInteger($remaining)
+           RETURN suggestion.pgId AS id,
+                  suggestion.fullName AS fullName,
+                  suggestion.crm AS crm,
+                  suggestion.crmState AS crmState,
+                  suggestion.profilePicUrl AS profilePicUrl,
+                  specialties,
+                  0 AS mutualConnections,
+                  similarity`,
+          { doctorId, existingIds, remaining },
+        );
+        results.push(
+          ...similarSuggestions.map((r: any) => ({
+            ...r,
+            reason: `${((r.similarity ?? 0) * 100).toFixed(0)}% similar a você`,
+          })),
+        );
+        existingIds.push(...similarSuggestions.map((r: any) => r.id));
+      } catch (e) {
+        this.logger.error('Similarity suggestion query failed', e);
+      }
+    }
+
     // Strategy 3: Fallback - any doctors not yet connected (uses Prisma)
     if (results.length < limit) {
       try {

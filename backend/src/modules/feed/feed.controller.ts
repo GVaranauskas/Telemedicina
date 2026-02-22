@@ -142,4 +142,33 @@ export class FeedController {
   ) {
     return this.feedService.getComments(postId, limit ? Number(limit) : 50);
   }
+
+  // ─── Bookmarks ────────────────────────────────────────────────
+
+  @Post('posts/:postId/bookmark')
+  @ApiOperation({ summary: 'Bookmark a post' })
+  async bookmarkPost(
+    @CurrentUser('doctorId') doctorId: string,
+    @Param('postId') postId: string,
+  ) {
+    return this.feedService.bookmarkPost(postId, doctorId);
+  }
+
+  @Delete('posts/:postId/bookmark')
+  @ApiOperation({ summary: 'Remove bookmark from a post' })
+  async unbookmarkPost(
+    @CurrentUser('doctorId') doctorId: string,
+    @Param('postId') postId: string,
+  ) {
+    return this.feedService.unbookmarkPost(postId, doctorId);
+  }
+
+  @Get('bookmarks')
+  @ApiOperation({ summary: 'Get my bookmarked posts' })
+  async getBookmarks(
+    @CurrentUser('doctorId') doctorId: string,
+    @Query('limit') limit?: number,
+  ) {
+    return this.feedService.getBookmarks(doctorId, limit ? Number(limit) : 20);
+  }
 }

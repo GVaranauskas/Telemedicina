@@ -16,6 +16,10 @@ import '../../features/network/presentation/network_graph_screen.dart';
 import '../../features/connections/presentation/connections_screen.dart';
 import '../../features/appointment/presentation/my_appointments_screen.dart';
 import '../../features/appointment/presentation/doctor_search_screen.dart';
+import '../../features/profile/presentation/doctor_profile_screen.dart';
+import '../../features/feed/presentation/post_detail_screen.dart';
+import '../../features/feed/presentation/bookmarks_screen.dart';
+import '../../features/profile/presentation/edit_profile_screen.dart';
 import '../../shared/widgets/main_scaffold.dart';
 import '../network/api_client.dart';
 
@@ -107,6 +111,13 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: '/doctor-search',
             builder: (context, state) => const DoctorSearchScreen(),
           ),
+          GoRoute(
+            path: '/doctor/:doctorId',
+            builder: (context, state) {
+              final doctorId = state.pathParameters['doctorId']!;
+              return DoctorProfileScreen(doctorId: doctorId);
+            },
+          ),
         ],
       ),
 
@@ -130,6 +141,21 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/notifications',
         builder: (context, state) => const NotificationsScreen(),
+      ),
+      GoRoute(
+        path: '/bookmarks',
+        builder: (context, state) => const BookmarksScreen(),
+      ),
+      GoRoute(
+        path: '/profile/edit',
+        builder: (context, state) => const EditProfileScreen(),
+      ),
+      GoRoute(
+        path: '/post/:postId',
+        builder: (context, state) {
+          final postId = state.pathParameters['postId']!;
+          return PostDetailScreen(postId: postId);
+        },
       ),
       // Feed is embedded in HomeScreen, no dedicated route needed
       GoRoute(

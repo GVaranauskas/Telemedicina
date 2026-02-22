@@ -1,4 +1,4 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Patch, Param, Body, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { NotificationService } from './notification.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -28,5 +28,20 @@ export class NotificationController {
   async getUnreadCount(@CurrentUser('doctorId') doctorId: string) {
     const count = await this.notificationService.getUnreadCount(doctorId);
     return { unreadCount: count };
+  }
+
+  @Patch(':notificationId/read')
+  @ApiOperation({ summary: 'Mark notification as read' })
+  async markAsRead(
+    @CurrentUser('doctorId') doctorId: string,
+    @Param('notificationId') notificationId: string,
+    @Body() body: { createdAt: string },
+  ) {
+    await this.notificationService.markAsRead(
+      doctorId,
+      notificationId,
+      body.createdAt,
+    );
+    return { status: 'ok' };
   }
 }

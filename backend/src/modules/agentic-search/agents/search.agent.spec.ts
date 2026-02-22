@@ -245,4 +245,183 @@ RETURN n`;
       expect(mockLLMFactory.chatWithFallback).toHaveBeenCalledTimes(5); // MAX_ITERATIONS
     });
   });
+
+  // ─── tool_use ID deduplication ──────────────────────────────────────────────
+
+  describe('processQuery — tool_use ID deduplication', () => {
+    it('should replace duplicate tool_use IDs across iterations', async () => {
+      // Both iterations return the same tool_use ID "call_dup"
+      mockLLMFactory.chatWithFallback
+        .mockResolvedValueOnce({
+          content: 'Searching...',
+          toolCalls: [{ id: 'call_dup', name: 'execute_cypher', arguments: { query: 'MATCH (n:Doctor) RETURN n', params: {} } }],
+          finishReason: 'tool_calls',
+          provider: 'openai',
+        })
+        .mockResolvedValueOnce({
+          content: 'Refining...',
+          toolCalls: [{ id: 'call_dup', name: 'execute_cypher', arguments: { query: 'MATCH (n:Doctor) RETURN n.name', params: {} } }],
+          finishReason: 'tool_calls',
+          provider: 'openai',
+        })
+        .mockResolvedValueOnce({
+          content: 'Found 3 doctors.',
+          toolCalls: [],
+          finishReason: 'stop',
+          provider: 'openai',
+        });
+
+      const result = await agent.processQuery('find doctors');
+
+      // Should complete without errors (no 400 from Claude API)
+      expect(result.answer).toBe('Found 3 doctors.');
+
+      // Inspect the messages passed to the 3rd chatWithFallback call.
+      // It should contain two assistant messages with DIFFERENT tool_use IDs.
+      const thirdCallMessages = mockLLMFactory.chatWithFallback.mock.calls[2][0];
+      const assistantMessages = thirdCallMessages.filter((m: any) => m.role === 'assistant');
+
+      expect(assistantMessages).toHaveLength(2);
+
+      // Parse tool_use IDs from each assistant message
+      const allToolUseIds: string[] = [];
+      for (const msg of assistantMessages) {
+        const parsed = JSON.parse(msg.content);
+        for (const block of parsed) {
+          if (block.type === 'tool_use') {
+            allToolUseIds.push(block.id);
+          }
+        }
+      }
+
+      // All IDs must be unique
+      expect(new Set(allToolUseIds).size).toBe(allToolUseIds.length);
+      // First iteration keeps original, second gets a new one
+      expect(allToolUseIds[0]).toBe('call_dup');
+      expect(allToolUseIds[1]).not.toBe('call_dup');
+      expect(allToolUseIds[1]).toMatch(/^toolu_/);
+    });
+
+    it('should replace empty/undefined tool_use IDs', async () => {
+      mockLLMFactory.chatWithFallback
+        .mockResolvedValueOnce({
+          content: 'Searching...',
+          toolCalls: [{ id: '', name: 'execute_cypher', arguments: { query: 'MATCH (n:Doctor) RETURN n', params: {} } }],
+          finishReason: 'tool_calls',
+          provider: 'gemini',
+        })
+        .mockResolvedValueOnce({
+          content: 'Done.',
+          toolCalls: [],
+          finishReason: 'stop',
+          provider: 'gemini',
+        });
+
+      const result = await agent.processQuery('find doctors');
+      expect(result.answer).toBe('Done.');
+
+      // Verify the assistant message got a generated ID (not empty)
+      const secondCallMessages = mockLLMFactory.chatWithFallback.mock.calls[1][0];
+      const assistantMsg = secondCallMessages.find((m: any) => m.role === 'assistant');
+      const parsed = JSON.parse(assistantMsg.content);
+      const toolUseBlock = parsed.find((b: any) => b.type === 'tool_use');
+
+      expect(toolUseBlock.id).toMatch(/^toolu_/);
+      expect(toolUseBlock.id.length).toBeGreaterThan(6);
+
+      // Verify tool_result references the same generated ID
+      const toolResultMsg = secondCallMessages.find((m: any) => m.role === 'tool');
+      expect(toolResultMsg.toolCallId).toBe(toolUseBlock.id);
+    });
+
+    it('should preserve unique IDs without modification', async () => {
+      mockLLMFactory.chatWithFallback
+        .mockResolvedValueOnce({
+          content: 'Step 1...',
+          toolCalls: [{ id: 'toolu_aaa111', name: 'execute_cypher', arguments: { query: 'MATCH (n:Doctor) RETURN n', params: {} } }],
+          finishReason: 'tool_calls',
+          provider: 'claude',
+        })
+        .mockResolvedValueOnce({
+          content: 'Step 2...',
+          toolCalls: [{ id: 'toolu_bbb222', name: 'execute_cypher', arguments: { query: 'MATCH (n:Doctor) RETURN n.name', params: {} } }],
+          finishReason: 'tool_calls',
+          provider: 'claude',
+        })
+        .mockResolvedValueOnce({
+          content: 'All done.',
+          toolCalls: [],
+          finishReason: 'stop',
+          provider: 'claude',
+        });
+
+      const result = await agent.processQuery('find doctors');
+      expect(result.answer).toBe('All done.');
+
+      // Both original IDs should be preserved (no duplicates)
+      const thirdCallMessages = mockLLMFactory.chatWithFallback.mock.calls[2][0];
+      const assistantMessages = thirdCallMessages.filter((m: any) => m.role === 'assistant');
+
+      const ids: string[] = [];
+      for (const msg of assistantMessages) {
+        const parsed = JSON.parse(msg.content);
+        for (const block of parsed) {
+          if (block.type === 'tool_use') ids.push(block.id);
+        }
+      }
+
+      expect(ids).toEqual(['toolu_aaa111', 'toolu_bbb222']);
+    });
+
+    it('should keep tool_result IDs in sync with tool_use IDs', async () => {
+      // Return same ID twice to force deduplication
+      mockLLMFactory.chatWithFallback
+        .mockResolvedValueOnce({
+          content: null,
+          toolCalls: [{ id: 'call_same', name: 'execute_cypher', arguments: { query: 'MATCH (n:Doctor) RETURN n', params: {} } }],
+          finishReason: 'tool_calls',
+          provider: 'openai',
+        })
+        .mockResolvedValueOnce({
+          content: null,
+          toolCalls: [{ id: 'call_same', name: 'execute_cypher', arguments: { query: 'MATCH (n:Doctor) RETURN n.name', params: {} } }],
+          finishReason: 'tool_calls',
+          provider: 'openai',
+        })
+        .mockResolvedValueOnce({
+          content: 'Result.',
+          toolCalls: [],
+          finishReason: 'stop',
+          provider: 'openai',
+        });
+
+      await agent.processQuery('test sync');
+
+      const thirdCallMessages = mockLLMFactory.chatWithFallback.mock.calls[2][0];
+
+      // For each assistant message, its tool_use ID must match
+      // the following tool_result's toolCallId
+      for (let i = 0; i < thirdCallMessages.length; i++) {
+        const msg = thirdCallMessages[i];
+        if (msg.role !== 'assistant') continue;
+
+        let toolUseId: string | undefined;
+        try {
+          const parsed = JSON.parse(msg.content);
+          const toolUseBlock = parsed.find((b: any) => b.type === 'tool_use');
+          if (toolUseBlock) toolUseId = toolUseBlock.id;
+        } catch {
+          continue;
+        }
+
+        if (!toolUseId) continue;
+
+        // The next message should be the matching tool_result
+        const nextMsg = thirdCallMessages[i + 1];
+        expect(nextMsg).toBeDefined();
+        expect(nextMsg.role).toBe('tool');
+        expect(nextMsg.toolCallId).toBe(toolUseId);
+      }
+    });
+  });
 });

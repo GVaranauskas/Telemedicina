@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/models/chat_model.dart';
 import '../../../core/providers/api_provider.dart';
+import '../../../core/providers/auth_provider.dart';
 
 class ChatDetailScreen extends ConsumerStatefulWidget {
   final String chatId;
@@ -29,6 +30,25 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
   void initState() {
     super.initState();
     _loadMessages();
+    _setupWebSocket();
+  }
+
+  void _setupWebSocket() {
+    final ws = ref.read(webSocketServiceProvider);
+    final userId = ref.read(authProvider).user?.doctorId;
+    if (userId != null) {
+      ws.connect(userId);
+      ws.onNewMessage((data) {
+        if (!mounted) return;
+        if (data is Map<String, dynamic>) {
+          final msg = MessageModel.fromJson(data);
+          setState(() => _messages.insert(0, msg));
+        }
+      });
+      ws.onMessageSent((data) {
+        // Message confirmed by server - could update message status
+      });
+    }
   }
 
   Future<void> _loadMessages() async {
@@ -46,8 +66,35 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
     }
   }
 
+  void _sendMessage() {
+    final content = _messageController.text.trim();
+    if (content.isEmpty) return;
+
+    final ws = ref.read(webSocketServiceProvider);
+    final userId = ref.read(authProvider).user?.doctorId ?? '';
+
+    ws.sendMessage(
+      chatId: widget.chatId,
+      receiverId: widget.otherUserId,
+      content: content,
+    );
+
+    // Optimistic: add message to list immediately
+    final optimisticMsg = MessageModel(
+      messageId: DateTime.now().millisecondsSinceEpoch.toString(),
+      chatId: widget.chatId,
+      senderId: userId,
+      content: content,
+      messageType: 'TEXT',
+      createdAt: DateTime.now(),
+    );
+    setState(() => _messages.insert(0, optimisticMsg));
+    _messageController.clear();
+  }
+
   @override
   void dispose() {
+    ref.read(webSocketServiceProvider).removeListeners();
     _messageController.dispose();
     super.dispose();
   }
@@ -92,38 +139,37 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
                 ),
               ],
             ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _messageController,
-                    decoration: InputDecoration(
-                      hintText: 'Digite uma mensagem...',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(24),
-                        borderSide: BorderSide.none,
+            child: SafeArea(
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _messageController,
+                      decoration: InputDecoration(
+                        hintText: 'Digite uma mensagem...',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(24),
+                          borderSide: BorderSide.none,
+                        ),
+                        filled: true,
+                        fillColor: AppColors.background,
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 10),
                       ),
-                      filled: true,
-                      fillColor: AppColors.background,
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 10),
+                      onSubmitted: (_) => _sendMessage(),
                     ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                CircleAvatar(
-                  backgroundColor: AppColors.primary,
-                  child: IconButton(
-                    icon: const Icon(Icons.send, color: Colors.white, size: 20),
-                    onPressed: () {
-                      // WebSocket send would go here
-                      if (_messageController.text.isNotEmpty) {
-                        _messageController.clear();
-                      }
-                    },
+                  const SizedBox(width: 8),
+                  CircleAvatar(
+                    backgroundColor: AppColors.primary,
+                    child: IconButton(
+                      icon:
+                          const Icon(Icons.send, color: Colors.white, size: 20),
+                      onPressed: _sendMessage,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ],

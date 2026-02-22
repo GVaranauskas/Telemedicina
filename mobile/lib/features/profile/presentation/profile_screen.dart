@@ -74,6 +74,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               if (doctor.skills.isNotEmpty)
                 _buildChipSection('Habilidades',
                   doctor.skills.map((s) => s.name ?? '').where((n) => n.isNotEmpty).toList()),
+              const SizedBox(height: 16),
+              _buildActionRow(),
               const SizedBox(height: 24),
               _buildLogoutButton(),
               const SizedBox(height: 32),
@@ -194,6 +196,36 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildActionRow() {
+    return Row(
+      children: [
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: () => context.push('/profile/edit'),
+            icon: const Icon(Icons.edit_outlined, size: 16),
+            label: const Text('Editar Perfil'),
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: () => context.push('/bookmarks'),
+            icon: const Icon(Icons.bookmark_outline_rounded, size: 16),
+            label: const Text('Posts Salvos'),
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+        ),
+      ],
     );
   }
 

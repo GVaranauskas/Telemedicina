@@ -60,4 +60,14 @@ class ConnectionRepository {
     final list = response.data as List? ?? [];
     return list.map((e) => ConnectionModel.fromJson(e)).toList();
   }
+
+  Future<void> endorseSkill(String targetDoctorId, String skillName) async {
+    await _api.dio.post('/connections/endorse/$targetDoctorId/$skillName');
+  }
+
+  Future<List<Map<String, dynamic>>> getEndorsements(String doctorId) async {
+    final response = await _api.dio.get('/connections/endorsements/$doctorId');
+    final list = response.data as List? ?? [];
+    return list.cast<Map<String, dynamic>>();
+  }
 }
