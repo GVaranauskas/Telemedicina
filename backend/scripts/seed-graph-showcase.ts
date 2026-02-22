@@ -35,7 +35,7 @@ const NEW_DOCTORS = [
     graduationYear: 2009, universityName: 'USP — Universidade de São Paulo',
     phone: '(11) 99002-0001',
     bio: 'Cirurgião geral com foco em cirurgia do aparelho digestivo. Membro titular do CBC.',
-    specialtyCodes: ['CIRGERAL'],
+    specialtyCodes: ['CIRGER'],
     skillNames: ['Cirurgia Laparoscópica', 'Cirurgia Robótica', 'Endoscopia'],
   },
   {
@@ -90,7 +90,7 @@ const NEW_DOCTORS = [
     graduationYear: 2014, universityName: 'UNIFESP — Universidade Federal de São Paulo',
     phone: '(11) 99002-0006',
     bio: 'Oftalmologista especializada em retina e vítreo. Experiência em injeções intravítreas.',
-    specialtyCodes: ['OFTALMO'],
+    specialtyCodes: ['OFTAL'],
     skillNames: ['Cirurgia Laparoscópica', 'Ultrassonografia'],
   },
   {

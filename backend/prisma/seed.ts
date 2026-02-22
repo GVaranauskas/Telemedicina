@@ -33,6 +33,9 @@ const specialties = [
   { name: 'Patologia Clínica', code: 'PATCLI' },
   { name: 'Hematologia', code: 'HEMATO' },
   { name: 'Clínica Médica', code: 'CLINMED' },
+  { name: 'Neurocirurgia', code: 'NEUROCI' },
+  { name: 'Cirurgia Torácica', code: 'CIRTORA' },
+  { name: 'Genética Médica', code: 'GENET' },
 ];
 
 const skills = [
