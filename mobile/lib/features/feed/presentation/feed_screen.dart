@@ -277,9 +277,7 @@ class _PostState extends ConsumerState<_Post> {
                         isActive: false,
                         activeColor: const Color(0xFF00BA7C),
                         onTap: () {
-                          SharePlus.instance.share(
-                            ShareParams(text: '${post.authorName}: ${post.content}'),
-                          );
+                          Share.share('${post.authorName}: ${post.content}');
                         },
                       ),
                       const SizedBox(width: 32),
