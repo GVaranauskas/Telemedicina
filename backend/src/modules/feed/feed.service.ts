@@ -380,7 +380,7 @@ export class FeedService {
       [userId, limit],
     );
 
-    const posts = [];
+    const posts: any[] = [];
     for (const row of result.rows) {
       try {
         const post = await this.getPostById(row.post_id);
