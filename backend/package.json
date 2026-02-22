@@ -23,7 +23,8 @@
     "prisma:seed": "ts-node prisma/seed.ts",
     "prisma:studio": "prisma studio",
     "db:setup": "prisma migrate dev && ts-node prisma/seed.ts",
-    "seed:all": "ts-node --compiler-options '{\"module\":\"commonjs\"}' scripts/seed-master.ts",
+    "seed:all": "ts-node --compiler-options '{\"module\":\"commonjs\"}' scripts/seed-master.ts && ts-node --compiler-options '{\"module\":\"commonjs\"}' scripts/seed-graph-showcase.ts",
+    "seed:showcase": "ts-node --compiler-options '{\"module\":\"commonjs\"}' scripts/seed-graph-showcase.ts",
     "seed:posts": "ts-node --compiler-options '{\"module\":\"commonjs\"}' scripts/seed-posts.ts"
   },
   "prisma": {
