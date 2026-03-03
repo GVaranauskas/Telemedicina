@@ -160,7 +160,7 @@ class _ComposeBoxState extends ConsumerState<_ComposeBox> {
                       onPressed: _hasText && !isCreating ? _publish : null,
                       style: FilledButton.styleFrom(
                         backgroundColor: const Color(0xFF1D9BF0),
-                        disabledBackgroundColor: const Color(0xFF1D9BF0).withOpacity(0.5),
+                        disabledBackgroundColor: const Color(0xFF1D9BF0).withValues(alpha: 0.5),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(20),
                         ),
@@ -201,7 +201,7 @@ class _ComposeBoxState extends ConsumerState<_ComposeBox> {
       padding: const EdgeInsets.only(right: 4),
       child: IconButton(
         icon: Icon(icon, size: 20, color: const Color(0xFF1D9BF0)),
-        onPressed: () {},
+        onPressed: null,
         constraints: const BoxConstraints(),
         padding: const EdgeInsets.all(6),
       ),

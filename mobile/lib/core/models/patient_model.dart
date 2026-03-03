@@ -7,8 +7,9 @@ class PatientModel {
   final String? profilePicUrl;
   final String? city;
   final String? state;
-  final DateTime dateOfBirth;
+  final DateTime? dateOfBirth;
   final String? gender;
+  // bloodType, allergies, medications not yet in backend schema — kept nullable/empty
   final String? bloodType;
   final List<String> allergies;
   final List<String> medications;
@@ -24,7 +25,7 @@ class PatientModel {
     this.profilePicUrl,
     this.city,
     this.state,
-    required this.dateOfBirth,
+    this.dateOfBirth,
     this.gender,
     this.bloodType,
     this.allergies = const [],
@@ -44,8 +45,8 @@ class PatientModel {
       city: json['city'],
       state: json['state'],
       dateOfBirth: json['dateOfBirth'] != null
-          ? DateTime.parse(json['dateOfBirth'])
-          : DateTime(1990, 1, 1),
+          ? DateTime.tryParse(json['dateOfBirth'])
+          : null,
       gender: json['gender'],
       bloodType: json['bloodType'],
       allergies: (json['allergies'] as List?)?.cast<String>() ?? [],
@@ -70,5 +71,10 @@ class PatientModel {
       return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
     }
     return fullName.substring(0, 1).toUpperCase();
+  }
+
+  String get dateOfBirthFormatted {
+    if (dateOfBirth == null) return 'Não informado';
+    return '${dateOfBirth!.day.toString().padLeft(2, '0')}/${dateOfBirth!.month.toString().padLeft(2, '0')}/${dateOfBirth!.year}';
   }
 }

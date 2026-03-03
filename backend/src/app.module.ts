@@ -25,7 +25,14 @@ import { ChatModule } from './modules/chat/chat.module';
 import { NotificationModule } from './modules/notification/notification.module';
 import { AgenticSearchModule } from './modules/agentic-search/agentic-search.module';
 import { GraphInsightsModule } from './modules/graph-insights/graph-insights.module';
+import { MedicalEventsModule } from './modules/medical-events/medical-events.module';
+import { StudyGroupsModule } from './modules/study-groups/study-groups.module';
 import { EventsModule } from './events/events.module';
+import { InstitutionWorkforceModule } from './modules/institution-workforce/institution-workforce.module';
+import { AppointmentModule } from './modules/appointment/appointment.module';
+import { PatientModule } from './modules/patient/patient.module';
+import { AvailabilityModule } from './modules/availability/availability.module';
+import { WorkplaceModule } from './modules/workplace/workplace.module';
 
 @Module({
   imports: [
@@ -53,6 +60,8 @@ import { EventsModule } from './events/events.module';
     // Feature modules
     AuthModule,
     DoctorModule,
+    PatientModule,
+    AppointmentModule,
     ConnectionModule,
     FeedModule,
     InstitutionModule,
@@ -61,7 +70,12 @@ import { EventsModule } from './events/events.module';
     NotificationModule,
     AgenticSearchModule,
     GraphInsightsModule,
+    MedicalEventsModule,
+    StudyGroupsModule,
     EventsModule,
+    InstitutionWorkforceModule,
+    AvailabilityModule,
+    WorkplaceModule,
   ],
 })
 export class AppModule {}

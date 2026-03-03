@@ -219,7 +219,7 @@ class NetworkSummary extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: () {},
+              onPressed: () => context.go('/connections'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: MedConnectColors.primary,
                 foregroundColor: Colors.white,
@@ -283,7 +283,7 @@ class NetworkSummary extends StatelessWidget {
           ),
           IconButton(
             icon: const Icon(Icons.arrow_forward_ios, size: 16),
-            onPressed: () {},
+            onPressed: () => context.go('/groups'),
           ),
         ],
       ),

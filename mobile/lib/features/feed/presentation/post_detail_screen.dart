@@ -158,7 +158,7 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
               color: Colors.white,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
+                  color: Colors.black.withValues(alpha: 0.05),
                   blurRadius: 4,
                   offset: const Offset(0, -2),
                 ),
@@ -224,7 +224,7 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
               onTap: () => context.push('/doctor/${post.authorId}'),
               child: CircleAvatar(
                 radius: 24,
-                backgroundColor: const Color(0xFF1D9BF0).withOpacity(0.15),
+                backgroundColor: const Color(0xFF1D9BF0).withValues(alpha: 0.15),
                 child: Text(
                   post.authorName.isNotEmpty
                       ? post.authorName[0].toUpperCase()
@@ -331,7 +331,7 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
             onTap: () => context.push('/doctor/${comment.authorId}'),
             child: CircleAvatar(
               radius: 16,
-              backgroundColor: const Color(0xFF00BA7C).withOpacity(0.15),
+              backgroundColor: const Color(0xFF00BA7C).withValues(alpha: 0.15),
               child: Text(
                 comment.authorName.isNotEmpty
                     ? comment.authorName[0].toUpperCase()

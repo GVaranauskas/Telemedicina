@@ -232,7 +232,7 @@ class _NetworkGraphScreenState extends ConsumerState<NetworkGraphScreen>
             graph.addEdge(nodeA, nodeB,
                 paint: Paint()
                   ..color = _colorForSpecialty(a.primarySpecialty)
-                      .withOpacity(0.3)
+                      .withValues(alpha: 0.3)
                   ..strokeWidth = 1.5);
           }
         }
@@ -344,7 +344,7 @@ class _NetworkGraphScreenState extends ConsumerState<NetworkGraphScreen>
             border: Border.all(color: Colors.white, width: 3),
             boxShadow: [
               BoxShadow(
-                color: AppColors.primary.withOpacity(0.4),
+                color: AppColors.primary.withValues(alpha: 0.4),
                 blurRadius: 12,
                 spreadRadius: 2,
               ),
@@ -387,13 +387,13 @@ class _NetworkGraphScreenState extends ConsumerState<NetworkGraphScreen>
             color: color,
             shape: BoxShape.circle,
             border: Border.all(
-              color: isSelected ? Colors.white : color.withOpacity(0.3),
+              color: isSelected ? Colors.white : color.withValues(alpha: 0.3),
               width: isSelected ? 3 : 2,
             ),
             boxShadow: isSelected
                 ? [
                     BoxShadow(
-                      color: color.withOpacity(0.5),
+                      color: color.withValues(alpha: 0.5),
                       blurRadius: 10,
                       spreadRadius: 2,
                     ),
@@ -557,7 +557,7 @@ class _NetworkGraphScreenState extends ConsumerState<NetworkGraphScreen>
             Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: AppColors.primaryLight.withOpacity(0.2),
+                color: AppColors.primaryLight.withValues(alpha: 0.2),
                 shape: BoxShape.circle,
               ),
               child: Icon(Icons.hub_outlined, size: 64, color: AppColors.primary),
@@ -685,7 +685,7 @@ class _NetworkGraphScreenState extends ConsumerState<NetworkGraphScreen>
                           const SizedBox(height: 4),
                           LinearProgressIndicator(
                             value: maxCount > 0 ? entry.value / maxCount : 0,
-                            backgroundColor: color.withOpacity(0.1),
+                            backgroundColor: color.withValues(alpha: 0.1),
                             valueColor: AlwaysStoppedAnimation<Color>(color),
                             minHeight: 6,
                             borderRadius: BorderRadius.circular(3),
@@ -721,7 +721,7 @@ class _NetworkGraphScreenState extends ConsumerState<NetworkGraphScreen>
                         '${entry.key}: ${entry.value}',
                         style: const TextStyle(fontSize: 12),
                       ),
-                      backgroundColor: AppColors.primaryLight.withOpacity(0.2),
+                      backgroundColor: AppColors.primaryLight.withValues(alpha: 0.2),
                     );
                   }).toList(),
                 ),
@@ -857,7 +857,7 @@ class _NetworkGraphScreenState extends ConsumerState<NetworkGraphScreen>
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.auto_graph, size: 64, color: AppColors.primary.withOpacity(0.3)),
+              Icon(Icons.auto_graph, size: 64, color: AppColors.primary.withValues(alpha: 0.3)),
               const SizedBox(height: 16),
               const Text(
                 'Insights indisponíveis',
@@ -1002,7 +1002,7 @@ class _NetworkGraphScreenState extends ConsumerState<NetworkGraphScreen>
                                 vertical: 2,
                               ),
                               decoration: BoxDecoration(
-                                color: color.withOpacity(0.1),
+                                color: color.withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Text(
@@ -1094,7 +1094,7 @@ class _NetworkGraphScreenState extends ConsumerState<NetworkGraphScreen>
                               width: 60,
                               child: LinearProgressIndicator(
                                 value: similarity,
-                                backgroundColor: const Color(0xFF1D9BF0).withOpacity(0.1),
+                                backgroundColor: const Color(0xFF1D9BF0).withValues(alpha: 0.1),
                                 valueColor: const AlwaysStoppedAnimation(Color(0xFF1D9BF0)),
                                 minHeight: 4,
                                 borderRadius: BorderRadius.circular(2),
@@ -1133,7 +1133,7 @@ class _NetworkGraphScreenState extends ConsumerState<NetworkGraphScreen>
         Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
+            color: color.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Icon(icon, color: color, size: 20),

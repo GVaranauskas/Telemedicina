@@ -157,6 +157,7 @@ class DoctorExperience {
 class Specialty {
   final String id;
   final String name;
+  // description not in backend schema — always null until added to Prisma
   final String? description;
 
   Specialty({required this.id, required this.name, this.description});
@@ -173,6 +174,7 @@ class Specialty {
 class Skill {
   final String id;
   final String name;
+  // category not in backend schema — always null until added to Prisma
   final String? category;
 
   Skill({required this.id, required this.name, this.category});

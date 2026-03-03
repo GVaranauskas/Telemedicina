@@ -97,19 +97,35 @@ class _Sidebar extends ConsumerWidget {
                       color: AppColors.primary, size: 28),
             ),
             const SizedBox(height: 8),
-            // Nav items
-            _item(context, Icons.home_outlined, Icons.home, 'Feed', '/home'),
-            _item(context, Icons.notifications_outlined, Icons.notifications,
-                'Notificações', '/notifications'),
-            _item(context, Icons.chat_bubble_outline, Icons.chat_bubble,
-                'Mensagens', '/chat'),
-            _item(context, Icons.people_outline, Icons.people, 'Conexões',
-                '/connections'),
-            _item(context, Icons.search, Icons.search, 'Buscar', '/search'),
-            _item(context, Icons.work_outline, Icons.work, 'Vagas', '/jobs'),
-            _item(context, Icons.person_outline, Icons.person, 'Perfil',
-                '/profile'),
-            const Spacer(),
+            // Nav items (scrollable so they never overflow on short screens)
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _item(context, Icons.home_outlined, Icons.home, 'Feed', '/home'),
+                    _item(context, Icons.notifications_outlined, Icons.notifications,
+                        'Notificações', '/notifications'),
+                    _item(context, Icons.chat_bubble_outline, Icons.chat_bubble,
+                        'Mensagens', '/chat'),
+                    _item(context, Icons.people_outline, Icons.people, 'Conexões',
+                        '/connections'),
+                    _item(context, Icons.search, Icons.search, 'Buscar', '/search'),
+                    _item(context, Icons.explore_outlined, Icons.explore, 'Descobrir',
+                        '/discover'),
+                    _item(context, Icons.work_outline, Icons.work, 'Vagas', '/jobs'),
+                    _item(context, Icons.event_outlined, Icons.event, 'Eventos',
+                        '/events'),
+                    _item(context, Icons.groups_outlined, Icons.groups, 'Grupos',
+                        '/groups'),
+                    _item(context, Icons.business_outlined, Icons.business,
+                        'Instituições', '/institutions'),
+                    _item(context, Icons.person_outline, Icons.person, 'Perfil',
+                        '/profile'),
+                  ],
+                ),
+              ),
+            ),
             // Publish button
             if (showLabels)
               Padding(
@@ -117,7 +133,7 @@ class _Sidebar extends ConsumerWidget {
                 child: SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: () {},
+                    onPressed: () => context.go('/feed'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
                       padding: const EdgeInsets.symmetric(vertical: 14),
@@ -149,7 +165,7 @@ class _Sidebar extends ConsumerWidget {
               padding: EdgeInsets.symmetric(
                   horizontal: showLabels ? 16 : 12, vertical: 12),
               child: GestureDetector(
-                onTap: () {},
+                onTap: () => context.go('/profile'),
                 child: Row(
                   children: [
                     CircleAvatar(
@@ -247,6 +263,9 @@ class _Sidebar extends ConsumerWidget {
     if (path == '/connections') {
       return location.startsWith('/connections') ||
           location.startsWith('/network');
+    }
+    if (path == '/discover') {
+      return location.startsWith('/discover');
     }
     return location.startsWith(path);
   }
@@ -469,10 +488,10 @@ class _MobileLayout extends StatelessWidget {
               children: [
                 _navItem(context, Icons.home_outlined, Icons.home, '/home'),
                 _navItem(context, Icons.search, Icons.search, '/search'),
+                _navItem(context, Icons.explore_outlined, Icons.explore,
+                    '/discover'),
                 _navItem(context, Icons.notifications_outlined,
                     Icons.notifications, '/notifications'),
-                _navItem(context, Icons.chat_bubble_outline,
-                    Icons.chat_bubble, '/chat'),
                 _navItem(context, Icons.person_outline, Icons.person,
                     '/profile'),
               ],

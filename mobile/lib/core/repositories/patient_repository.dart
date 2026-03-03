@@ -13,7 +13,7 @@ class PatientRepository {
   }
 
   Future<PatientModel> updateProfile(Map<String, dynamic> data) async {
-    final response = await _api.dio.put('/patients/me', data: data);
+    final response = await _api.dio.patch('/patients/me', data: data);
     return PatientModel.fromJson(response.data);
   }
 
@@ -31,7 +31,7 @@ class PatientRepository {
     if (upcoming) params['upcoming'] = 'true';
 
     final response = await _api.dio.get(
-      '/patients/me/appointments',
+      '/appointments/patient/me',
       queryParameters: params,
     );
 

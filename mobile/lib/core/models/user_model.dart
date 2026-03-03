@@ -24,6 +24,7 @@ class UserModel {
   final String role;
   final String? doctorId;
   final String? patientId;
+  final String? institutionId;
   final String? fullName;
 
   UserModel({
@@ -32,6 +33,7 @@ class UserModel {
     required this.role,
     this.doctorId,
     this.patientId,
+    this.institutionId,
     this.fullName,
   });
 
@@ -42,6 +44,7 @@ class UserModel {
       role: json['role'],
       doctorId: json['doctorId'],
       patientId: json['patientId'],
+      institutionId: json['institutionId'],
       fullName: json['fullName'],
     );
   }
@@ -52,6 +55,7 @@ class UserModel {
         'role': role,
         'doctorId': doctorId,
         'patientId': patientId,
+        'institutionId': institutionId,
         'fullName': fullName,
       };
 

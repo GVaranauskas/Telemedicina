@@ -198,12 +198,12 @@ class _SmartSearchScreenState extends ConsumerState<SmartSearchScreen> {
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
-                  AppColors.primary.withOpacity(0.08),
-                  AppColors.accent.withOpacity(0.05),
+                  AppColors.primary.withValues(alpha: 0.08),
+                  AppColors.accent.withValues(alpha: 0.05),
                 ],
               ),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.primary.withOpacity(0.2)),
+              border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -265,7 +265,7 @@ class _SmartSearchScreenState extends ConsumerState<SmartSearchScreen> {
         border: Border.all(color: AppColors.border),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -284,7 +284,7 @@ class _SmartSearchScreenState extends ConsumerState<SmartSearchScreen> {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.12),
+                  color: color.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(icon, color: color, size: 22),
@@ -364,7 +364,7 @@ class _SmartSearchScreenState extends ConsumerState<SmartSearchScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(

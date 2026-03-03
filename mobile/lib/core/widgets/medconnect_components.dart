@@ -279,18 +279,18 @@ class _MedCardState extends State<MedCard> with SingleTickerProviderStateMixin {
 /// BADGE - shadcn-inspired badge/chip
 /// ============================================================================
 
-enum BadgeVariant { primary, secondary, success, warning, destructive, outline }
+enum MedTagVariant { primary, secondary, success, warning, destructive, outline }
 
-class Badge extends StatelessWidget {
+class MedTag extends StatelessWidget {
   final String text;
-  final BadgeVariant variant;
+  final MedTagVariant variant;
   final IconData? icon;
   final VoidCallback? onTap;
 
-  const Badge({
+  const MedTag({
     super.key,
     required this.text,
-    this.variant = BadgeVariant.secondary,
+    this.variant = MedTagVariant.secondary,
     this.icon,
     this.onTap,
   });
@@ -328,32 +328,32 @@ class Badge extends StatelessWidget {
 
   Map<String, Color?> _getColors() {
     switch (variant) {
-      case BadgeVariant.primary:
+      case MedTagVariant.primary:
         return {
           'bg': MedConnectColors.primaryLight,
           'fg': MedConnectColors.primary,
         };
-      case BadgeVariant.secondary:
+      case MedTagVariant.secondary:
         return {
           'bg': MedConnectColors.secondary,
           'fg': MedConnectColors.textSecondary,
         };
-      case BadgeVariant.success:
+      case MedTagVariant.success:
         return {
           'bg': MedConnectColors.successLight,
           'fg': MedConnectColors.success,
         };
-      case BadgeVariant.warning:
+      case MedTagVariant.warning:
         return {
           'bg': MedConnectColors.warningLight,
           'fg': MedConnectColors.warning,
         };
-      case BadgeVariant.destructive:
+      case MedTagVariant.destructive:
         return {
           'bg': MedConnectColors.error.withAlpha(26),
           'fg': MedConnectColors.error,
         };
-      case BadgeVariant.outline:
+      case MedTagVariant.outline:
         return {
           'bg': Colors.transparent,
           'fg': MedConnectColors.textSecondary,

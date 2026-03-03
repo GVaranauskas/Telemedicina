@@ -63,7 +63,7 @@ class FeedList extends ConsumerWidget {
                 ),
               ),
               TextButton.icon(
-                onPressed: () {},
+                onPressed: null,
                 icon: const Icon(Icons.tune, size: 18),
                 label: const Text('Filtrar'),
               ),
@@ -135,7 +135,7 @@ class FeedList extends ConsumerWidget {
               ),
               IconButton(
                 icon: const Icon(Icons.more_vert),
-                onPressed: () {},
+                onPressed: null,
               ),
             ],
           ),

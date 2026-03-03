@@ -65,6 +65,10 @@ model Doctor {
   publications          PublicationAuthor[]
   projectMemberships    ResearchProjectMember[]
   studyGroupMemberships StudyGroupMember[]
+  scheduleBlocks        ScheduleBlock[]
+  shiftAssignments      ShiftAssignment[]
+  contracts             InstitutionContract[]
+  contactLogs           ContactLog[]
 
   @@unique([crm, crmState])
   @@index([city, state])
@@ -83,6 +87,8 @@ model Specialty {
   jobs           Job[]
   publications   PublicationSpecialty[]
   studyGroups    StudyGroup[]
+  shiftTemplates ShiftTemplate[]
+  contracts      InstitutionContract[]
 
   @@map("specialties")
 }
@@ -158,10 +164,15 @@ model Institution {
   createdAt     DateTime           @default(now())
   updatedAt     DateTime           @updatedAt
   profilePicUrl String?
-  experiences   DoctorExperience[]
-  events        Event[]
-  adminUser     User               @relation(fields: [adminUserId], references: [id])
-  jobs          Job[]
+  experiences      DoctorExperience[]
+  events           Event[]
+  adminUser        User                  @relation(fields: [adminUserId], references: [id])
+  jobs             Job[]
+  departments      Department[]
+  contracts        InstitutionContract[]
+  shiftTemplates   ShiftTemplate[]
+  shiftAssignments ShiftAssignment[]
+  contactLogs      ContactLog[]
 
   @@index([city, state])
   @@index([type])
@@ -186,9 +197,10 @@ model Job {
   expiresAt     DateTime?
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
-  applications  JobApplication[]
-  institution   Institution      @relation(fields: [institutionId], references: [id])
-  specialty     Specialty?       @relation(fields: [specialtyId], references: [id])
+  applications     JobApplication[]
+  shiftAssignments ShiftAssignment[]
+  institution      Institution      @relation(fields: [institutionId], references: [id])
+  specialty        Specialty?       @relation(fields: [specialtyId], references: [id])
 
   @@index([city, state])
   @@index([type])
@@ -907,4 +919,209 @@ enum DayOfWeek {
   FRIDAY
   SATURDAY
   SUNDAY
+}
+
+// ─── Schedule & Workforce Models ─────────────────────────────────────────────
+
+model ScheduleBlock {
+  id        String        @id @default(uuid())
+  doctorId  String
+  startDate DateTime
+  endDate   DateTime
+  reason    String?
+  blockType BlockType
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  doctor    Doctor        @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@index([doctorId])
+  @@index([startDate, endDate])
+  @@map("schedule_blocks")
+}
+
+model Department {
+  id             String          @id @default(uuid())
+  institutionId  String
+  name           String
+  type           DepartmentType
+  description    String?
+  isActive       Boolean         @default(true)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  institution    Institution     @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  shiftTemplates ShiftTemplate[]
+  shiftAssignments ShiftAssignment[]
+
+  @@index([institutionId])
+  @@map("departments")
+}
+
+model ShiftTemplate {
+  id               String          @id @default(uuid())
+  institutionId    String
+  departmentId     String
+  name             String
+  dayOfWeek        DayOfWeek
+  startTime        String
+  endTime          String
+  shiftType        ShiftType
+  requiredDoctors  Int             @default(1)
+  specialtyId      String?
+  isActive         Boolean         @default(true)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  institution      Institution     @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  department       Department      @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  specialty        Specialty?      @relation(fields: [specialtyId], references: [id])
+
+  @@index([institutionId])
+  @@index([departmentId])
+  @@map("shift_templates")
+}
+
+model ShiftAssignment {
+  id            String        @id @default(uuid())
+  doctorId      String
+  institutionId String
+  departmentId  String?
+  date          DateTime      @db.Date
+  startTime     String
+  endTime       String
+  shiftType     ShiftType
+  status        ShiftStatus   @default(SCHEDULED)
+  notes         String?
+  jobId         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  doctor        Doctor        @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  institution   Institution   @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  department    Department?   @relation(fields: [departmentId], references: [id])
+  job           Job?          @relation(fields: [jobId], references: [id])
+
+  @@index([doctorId])
+  @@index([institutionId])
+  @@index([date])
+  @@index([status])
+  @@map("shift_assignments")
+}
+
+model InstitutionContract {
+  id            String         @id @default(uuid())
+  institutionId String
+  doctorId      String
+  type          ContractType
+  status        ContractStatus @default(ACTIVE)
+  hourlyRate    Float?
+  monthlyRate   Float?
+  startDate     DateTime
+  endDate       DateTime?
+  terms         String?
+  specialtyId   String?
+  notes         String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  institution   Institution    @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  doctor        Doctor         @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  specialty     Specialty?     @relation(fields: [specialtyId], references: [id])
+
+  @@index([institutionId])
+  @@index([doctorId])
+  @@index([status])
+  @@index([endDate])
+  @@map("institution_contracts")
+}
+
+model ContactLog {
+  id            String        @id @default(uuid())
+  institutionId String
+  doctorId      String
+  type          ContactType
+  outcome       ContactOutcome
+  notes         String?
+  followUpDate  DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  institution   Institution   @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  doctor        Doctor        @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@index([institutionId])
+  @@index([doctorId])
+  @@index([followUpDate])
+  @@map("contact_logs")
+}
+
+// ─── New Enums ────────────────────────────────────────────────────────────────
+
+enum BlockType {
+  VACATION
+  CONFERENCE
+  PERSONAL
+  SICK_LEAVE
+  MATERNITY_LEAVE
+}
+
+enum DepartmentType {
+  UTI
+  PRONTO_SOCORRO
+  CENTRO_CIRURGICO
+  ENFERMARIA
+  AMBULATORIO
+  PEDIATRIA
+  MATERNIDADE
+  ONCOLOGIA
+  CARDIOLOGIA
+  NEUROLOGIA
+  ORTOPEDIA
+  PSIQUIATRIA
+  OUTROS
+}
+
+enum ShiftType {
+  PLANTAO_12H
+  PLANTAO_24H
+  CONSULTA
+  SOBREAVISO
+  CIRURGIA
+  VISITA
+}
+
+enum ShiftStatus {
+  SCHEDULED
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum ContractType {
+  CLT
+  PJ
+  COOPERATIVA
+  TEMPORARIO
+  AUTONOMO
+}
+
+enum ContractStatus {
+  ACTIVE
+  EXPIRED
+  SUSPENDED
+  PENDING_SIGNATURE
+  CANCELLED
+}
+
+enum ContactType {
+  PHONE
+  EMAIL
+  IN_APP
+  WHATSAPP
+  IN_PERSON
+}
+
+enum ContactOutcome {
+  CONTACTED
+  INTERESTED
+  DECLINED
+  NO_RESPONSE
+  SCHEDULED_INTERVIEW
+  HIRED
 }

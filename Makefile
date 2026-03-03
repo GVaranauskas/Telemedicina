@@ -69,6 +69,8 @@ seed-all:
 	@cd $(BACKEND_DIR) && npm run seed:all
 	@echo "📝 Seeding posts into ScyllaDB..."
 	@cd $(BACKEND_DIR) && npm run seed:posts
+	@echo "📅 Seeding schedule & workforce data..."
+	@cd $(BACKEND_DIR) && npx ts-node --compiler-options '{"module":"commonjs"}' scripts/seed-schedule-data.ts
 
 seed-posts:
 	@echo "📝 Seeding posts into ScyllaDB..."

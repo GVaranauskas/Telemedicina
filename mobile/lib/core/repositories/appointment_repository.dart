@@ -58,4 +58,14 @@ class AppointmentRepository {
   Future<void> confirmAppointment(String appointmentId) async {
     await _api.dio.patch('/appointments/$appointmentId/confirm');
   }
+
+  Future<List<AppointmentModel>> getPatientAppointments({bool? upcoming, bool? past}) async {
+    final response = await _api.dio.get('/appointments/patient/me', queryParameters: {
+      if (upcoming == true) 'upcoming': 'true',
+      if (past == true) 'past': 'true',
+      'limit': 50,
+    });
+    final data = response.data['data'] as List;
+    return data.map((e) => AppointmentModel.fromJson(e)).toList();
+  }
 }
