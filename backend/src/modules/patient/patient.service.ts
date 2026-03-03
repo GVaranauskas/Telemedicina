@@ -47,10 +47,28 @@ export class PatientService {
   async findByUserId(userId: string) {
     const patient = await this.prisma.patient.findUnique({
       where: { userId },
-      include: { user: { select: { email: true } } },
+      include: { user: { select: { id: true, email: true, role: true } } },
     });
     
     if (!patient) throw new NotFoundException('Paciente não encontrado');
     return patient;
+  }
+
+  async updateByUserId(
+    userId: string,
+    data: { fullName?: string; phone?: string; dateOfBirth?: string },
+  ) {
+    const patient = await this.prisma.patient.findUnique({ where: { userId } });
+    if (!patient) throw new NotFoundException('Paciente não encontrado');
+
+    return this.prisma.patient.update({
+      where: { userId },
+      data: {
+        ...(data.fullName && { fullName: data.fullName }),
+        ...(data.phone && { phone: data.phone }),
+        ...(data.dateOfBirth && { dateOfBirth: new Date(data.dateOfBirth) }),
+      },
+      include: { user: { select: { id: true, email: true, role: true } } },
+    });
   }
 }

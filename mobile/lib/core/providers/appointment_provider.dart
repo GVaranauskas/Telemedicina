@@ -134,6 +134,16 @@ class AppointmentNotifier extends StateNotifier<AppointmentState> {
     }
   }
 
+  Future<void> loadAppointments() async {
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      final appointments = await _repo.getPatientAppointments();
+      state = state.copyWith(isLoading: false, appointments: appointments);
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: e.toString());
+    }
+  }
+
   Future<void> cancelAppointment(String appointmentId, {String? reason}) async {
     try {
       await _repo.cancelAppointment(appointmentId, reason: reason);

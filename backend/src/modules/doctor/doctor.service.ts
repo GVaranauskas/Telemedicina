@@ -13,6 +13,7 @@ import {
   AddExperienceDto,
 } from './dto/add-specialty.dto';
 import { EVENTS } from '../../events/events.constants';
+import { BlockType, AppointmentStatus, ShiftStatus } from '@prisma/client';
 
 @Injectable()
 export class DoctorService {
@@ -233,6 +234,137 @@ export class DoctorService {
 
   async getAllSkills() {
     return this.prisma.skill.findMany({ orderBy: { name: 'asc' } });
+  }
+
+  // ─── Agenda ─────────────────────────────────────────────────────────────────
+
+  async getAgenda(doctorId: string, from: Date, to: Date) {
+    const [appointments, shifts, blocks, availabilities] = await Promise.all([
+      this.prisma.appointment.findMany({
+        where: {
+          doctorId,
+          scheduledAt: { gte: from, lte: to },
+          status: {
+            notIn: [
+              AppointmentStatus.CANCELLED_BY_PATIENT,
+              AppointmentStatus.CANCELLED_BY_DOCTOR,
+            ],
+          },
+        },
+        include: {
+          patient: { select: { fullName: true, phone: true } },
+          workplace: { select: { name: true, street: true, city: true } },
+        },
+        orderBy: { scheduledAt: 'asc' },
+      }),
+      this.prisma.shiftAssignment.findMany({
+        where: {
+          doctorId,
+          date: { gte: from, lte: to },
+          status: { notIn: [ShiftStatus.CANCELLED] },
+        },
+        include: {
+          institution: { select: { id: true, name: true, city: true } },
+          department: { select: { id: true, name: true, type: true } },
+        },
+        orderBy: { date: 'asc' },
+      }),
+      this.prisma.scheduleBlock.findMany({
+        where: {
+          doctorId,
+          startDate: { lte: to },
+          endDate: { gte: from },
+        },
+        orderBy: { startDate: 'asc' },
+      }),
+      this.prisma.doctorAvailability.findMany({
+        where: { doctorId, isActive: true },
+        include: { workplace: { select: { name: true, city: true } } },
+        orderBy: { dayOfWeek: 'asc' },
+      }),
+    ]);
+
+    return {
+      appointments: appointments.map(a => {
+        const appt = a as typeof a & {
+          patient?: { fullName: string; phone?: string | null };
+          workplace?: { name: string; street?: string | null; city: string };
+        };
+        return {
+          id: appt.id,
+          type: 'APPOINTMENT' as const,
+          date: appt.scheduledAt,
+          durationMin: appt.durationMin,
+          status: appt.status,
+          appointmentType: appt.type,
+          patient: appt.patient,
+          workplace: appt.workplace,
+          reason: appt.reason,
+          notes: appt.notes,
+        };
+      }),
+      shifts: shifts.map(s => ({
+        id: s.id,
+        type: 'SHIFT' as const,
+        date: s.date,
+        startTime: s.startTime,
+        endTime: s.endTime,
+        shiftType: s.shiftType,
+        status: s.status,
+        institution: s.institution,
+        department: s.department,
+        notes: s.notes,
+      })),
+      blocks: blocks.map(b => ({
+        id: b.id,
+        type: 'BLOCK' as const,
+        startDate: b.startDate,
+        endDate: b.endDate,
+        blockType: b.blockType,
+        reason: b.reason,
+      })),
+      availabilities,
+    };
+  }
+
+  async getShifts(doctorId: string, from: Date, to: Date) {
+    return this.prisma.shiftAssignment.findMany({
+      where: {
+        doctorId,
+        date: { gte: from, lte: to },
+      },
+      include: {
+        institution: { select: { id: true, name: true, city: true, state: true } },
+        department: { select: { id: true, name: true, type: true } },
+        job: { select: { id: true, title: true } },
+      },
+      orderBy: { date: 'asc' },
+    });
+  }
+
+  async createScheduleBlock(doctorId: string, dto: {
+    startDate: Date;
+    endDate: Date;
+    blockType: BlockType;
+    reason?: string;
+  }) {
+    return this.prisma.scheduleBlock.create({
+      data: {
+        doctorId,
+        startDate: dto.startDate,
+        endDate: dto.endDate,
+        blockType: dto.blockType,
+        reason: dto.reason,
+      },
+    });
+  }
+
+  async deleteScheduleBlock(doctorId: string, blockId: string) {
+    const block = await this.prisma.scheduleBlock.findFirst({
+      where: { id: blockId, doctorId },
+    });
+    if (!block) throw new NotFoundException('Schedule block not found');
+    await this.prisma.scheduleBlock.delete({ where: { id: blockId } });
   }
 
   private async syncDoctorLocation(

@@ -208,5 +208,5 @@ class AppointmentModel {
     }
   }
 
-  String get typeDisplay => type == 'TELEMEDICINA' ? 'Telemedicina' : 'Presencial';
+  String get typeDisplay => type == 'TELECONSULTA' ? 'Teleconsulta' : 'Presencial';
 }

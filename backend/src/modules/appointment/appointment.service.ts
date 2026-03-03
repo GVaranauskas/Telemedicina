@@ -107,13 +107,49 @@ export class AppointmentService {
       profilePicUrl: string | null;
     }>(cypher, params);
 
+    // Fallback: if Neo4j has no geospatial data, query PostgreSQL directly
+    let workplaceIds: string[];
+    let doctorIds: string[];
+
     if (nearbyResults.length === 0) {
-      return { data: [], meta: { total: 0, page, limit, totalPages: 0 } };
+      this.logger.warn(
+        'Neo4j returned no geospatial results — falling back to PostgreSQL doctor search',
+      );
+
+      const pgWorkplaces = await this.prisma.doctorWorkplace.findMany({
+        where: { isActive: true },
+        include: {
+          doctor: {
+            select: { id: true, fullName: true, crm: true, crmState: true, profilePicUrl: true },
+          },
+        },
+        take: 50,
+      });
+
+      if (pgWorkplaces.length === 0) {
+        return { data: [], meta: { total: 0, page, limit, totalPages: 0 } };
+      }
+
+      // Build nearbyResults-like structure from PostgreSQL data
+      for (const wp of pgWorkplaces) {
+        nearbyResults.push({
+          doctorId: wp.doctorId,
+          workplaceId: wp.id,
+          workplaceName: wp.name,
+          city: wp.city,
+          state: wp.state,
+          distanceMeters: 0,
+          doctorName: wp.doctor.fullName,
+          crm: wp.doctor.crm,
+          crmState: wp.doctor.crmState,
+          profilePicUrl: wp.doctor.profilePicUrl,
+        });
+      }
     }
 
     // Step 2: Check availability from PostgreSQL
-    const workplaceIds = nearbyResults.map((r) => r.workplaceId);
-    const doctorIds = [...new Set(nearbyResults.map((r) => r.doctorId))];
+    workplaceIds = nearbyResults.map((r) => r.workplaceId);
+    doctorIds = [...new Set(nearbyResults.map((r) => r.doctorId))];
 
     // Determine the day of week for filtering
     let targetDayOfWeek: DayOfWeek | undefined;
@@ -557,6 +593,48 @@ export class AppointmentService {
     }
 
     return slots;
+  }
+
+  async getPatientAppointments(patientId: string, query: {
+    status?: string;
+    upcoming?: boolean;
+    past?: boolean;
+    page?: number;
+    limit?: number;
+  }) {
+    const { status, upcoming, past, page = 1, limit = 20 } = query;
+    const now = new Date();
+
+    const where: any = { patientId };
+    if (status) where.status = status;
+    if (upcoming) where.scheduledAt = { gte: now };
+    if (past) where.scheduledAt = { lt: now };
+
+    const [appointments, total] = await Promise.all([
+      this.prisma.appointment.findMany({
+        where,
+        include: {
+          doctor: {
+            select: {
+              id: true,
+              fullName: true,
+              profilePicUrl: true,
+              specialties: { include: { specialty: { select: { name: true } } }, take: 1 },
+            },
+          },
+          workplace: { select: { name: true, street: true, city: true, state: true } },
+        },
+        orderBy: { scheduledAt: upcoming ? 'asc' : 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.appointment.count({ where }),
+    ]);
+
+    return {
+      data: appointments,
+      meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
+    };
   }
 
   private timeToMinutes(time: string): number {

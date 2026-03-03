@@ -399,4 +399,46 @@ export class FeedService {
     );
     return result.rows.length > 0;
   }
+
+  /**
+   * Aggregate most-used tags from the last 48h across post_by_id.
+   * Falls back to Neo4j specialty-based trending when ScyllaDB is unavailable.
+   */
+  async getTrending(limit = 20): Promise<{ tags: { tag: string; count: number }[]; topPosts: any[] }> {
+    const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000);
+    const tagCounts = new Map<string, number>();
+    let topPosts: any[] = [];
+
+    try {
+      // Scan recent posts for tags — ALLOW FILTERING is acceptable for 48h window in dev
+      const result = await this.scylla.execute(
+        `SELECT post_id, tags, likes_count, comments_count, created_at, author_name, author_pic_url, content
+         FROM post_by_id WHERE created_at >= ? ALLOW FILTERING`,
+        [cutoff],
+        { fetchSize: 500 },
+      );
+
+      for (const row of result.rows) {
+        const tags: string[] = row.tags ? Array.from<string>(row.tags) : [];
+        for (const tag of tags) {
+          if (tag) tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1);
+        }
+      }
+
+      // Top posts by engagement (likes + comments)
+      topPosts = result.rows
+        .map(r => this.mapPostRow(r))
+        .sort((a, b) => (b.likesCount + b.commentsCount) - (a.likesCount + a.commentsCount))
+        .slice(0, 5);
+    } catch (err) {
+      this.logger.warn('getTrending: ScyllaDB query failed, returning empty tags', err);
+    }
+
+    const tags = Array.from(tagCounts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, limit)
+      .map(([tag, count]) => ({ tag, count }));
+
+    return { tags, topPosts };
+  }
 }

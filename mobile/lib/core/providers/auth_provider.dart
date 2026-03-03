@@ -51,13 +51,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       final response = await _repo.login(email: email, password: password);
       await ApiClient.saveTokens(response.accessToken, response.refreshToken);
-      
-      // Use fullName from response (now provided by backend)
-      UserModel userWithFullName = response.user;
-      
+      await ApiClient.saveUserRole(response.user.role);
       state = state.copyWith(
         status: AuthStatus.authenticated,
-        user: userWithFullName,
+        user: response.user,
       );
       return true;
     } on DioException catch (e) {
@@ -90,6 +87,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         phone: phone,
       );
       await ApiClient.saveTokens(response.accessToken, response.refreshToken);
+      await ApiClient.saveUserRole(response.user.role);
       state = state.copyWith(
         status: AuthStatus.authenticated,
         user: response.user,
@@ -123,6 +121,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         phone: phone,
       );
       await ApiClient.saveTokens(response.accessToken, response.refreshToken);
+      await ApiClient.saveUserRole(response.user.role);
       state = state.copyWith(
         status: AuthStatus.authenticated,
         user: response.user,

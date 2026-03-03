@@ -910,8 +910,266 @@ async function main() {
     }
     console.log(`  ✓ ${eventsCreated} events created\n`);
 
-    // ── STEP 9: Graph statistics ────────────────────────────────────────
-    console.log('📊 Step 9: Final graph statistics...\n');
+    // ── STEP 9: Publications + AUTHORED + CITES ──────────────────────────
+    console.log('📄 Step 9: Creating publications...');
+    const PUBLICATIONS: { doctorEmails: string[]; title: string; journal: string; specCodes: string[]; citeIdx?: number[] }[] = [
+      { doctorEmails: ['ana.silva@medconnect.dev', 'rodrigo.tavares@medconnect.dev'], title: 'Cardiopatia isquêmica e desfechos em pacientes diabéticos: um estudo de coorte', journal: 'Arquivos Brasileiros de Cardiologia', specCodes: ['CARDIO', 'ENDO'] },
+      { doctorEmails: ['ana.silva@medconnect.dev'], title: 'Ecocardiografia tridimensional no diagnóstico de insuficiência cardíaca', journal: 'Revista Brasileira de Ecocardiografia', specCodes: ['CARDIO'] },
+      { doctorEmails: ['rafael.costa@medconnect.dev'], title: 'Biomarcadores de neuroinflamação em pacientes com doença de Alzheimer', journal: 'Dementia & Neuropsychologia', specCodes: ['NEURO'] },
+      { doctorEmails: ['rafael.costa@medconnect.dev', 'andre.pinto@medconnect.dev'], title: 'Correlação entre disfunção respiratória e declínio cognitivo na DPOC', journal: 'Jornal Brasileiro de Pneumologia', specCodes: ['NEURO', 'PNEUMO'] },
+      { doctorEmails: ['mariana.oliveira@medconnect.dev'], title: 'Imunoterapia em tumores sólidos: resposta em populações brasileiras', journal: 'Oncologia no Brasil', specCodes: ['ONCO'] },
+      { doctorEmails: ['mariana.oliveira@medconnect.dev', 'lucas.pereira@medconnect.dev'], title: 'Infecções oportunistas em pacientes oncológicos imunossuprimidos', journal: 'Brazilian Journal of Infectious Diseases', specCodes: ['ONCO', 'INFEC'] },
+      { doctorEmails: ['fernanda.lima@medconnect.dev'], title: 'Impacto da cirurgia bariátrica no controle do diabetes tipo 2', journal: 'Revista Brasileira de Endocrinologia', specCodes: ['ENDO'] },
+      { doctorEmails: ['lucas.pereira@medconnect.dev'], title: 'Epidemiologia do HIV/AIDS no Brasil: tendências regionais 2015–2025', journal: 'Brazilian Journal of Infectious Diseases', specCodes: ['INFEC'] },
+      { doctorEmails: ['gabriel.ferreira@medconnect.dev'], title: 'Enteroscopia por cápsula vs enteroscopia por duplo-balão na doença de Crohn', journal: 'Arquivos de Gastroenterologia', specCodes: ['GASTRO'] },
+      { doctorEmails: ['thiago.barbosa@medconnect.dev', 'andre.pinto@medconnect.dev'], title: 'Ventilação protetora e mortalidade em UTI adulto: revisão sistemática', journal: 'Revista Brasileira de Terapia Intensiva', specCodes: ['UTI', 'PNEUMO'] },
+      { doctorEmails: ['rodrigo.tavares@medconnect.dev'], title: 'Cirurgia robótica versus cirurgia aberta na revascularização miocárdica', journal: 'Revista Brasileira de Cirurgia Cardiovascular', specCodes: ['CIRCARDIO', 'CARDIO'] },
+      { doctorEmails: ['patricia.moura@medconnect.dev'], title: 'Tratamento com biológicos em artrite reumatoide refratária: série de casos', journal: 'Revista Brasileira de Reumatologia', specCodes: ['REUMA'] },
+      { doctorEmails: ['beatriz.alves@medconnect.dev'], title: 'Dermatoscopia digital no estadiamento do melanoma cutâneo', journal: 'Anais Brasileiros de Dermatologia', specCodes: ['DERMA'] },
+      { doctorEmails: ['camila.souza@medconnect.dev'], title: 'TCC vs farmacoterapia no tratamento do transtorno depressivo maior', journal: 'Revista Brasileira de Psiquiatria', specCodes: ['PSIQ'] },
+      { doctorEmails: ['isabela.franco@medconnect.dev', 'thiago.barbosa@medconnect.dev'], title: 'Surfactante exógeno em neonatos com síndrome de angústia respiratória: novos protocolos', journal: 'Jornal de Pediatria', specCodes: ['PED', 'UTI'] },
+    ];
+
+    const pubIds: string[] = [];
+    for (const pub of PUBLICATIONS) {
+      try {
+        const existingPub = await prisma.publication.findFirst({ where: { title: pub.title } });
+        let pubRecord: any = existingPub;
+        if (!pubRecord) {
+          pubRecord = await prisma.publication.create({
+            data: {
+              title: pub.title,
+              journal: pub.journal,
+              publishDate: new Date(2020 + Math.floor(Math.random() * 5), Math.floor(Math.random() * 12), 1),
+              keywords: pub.specCodes,
+            },
+          });
+
+          for (let i = 0; i < pub.doctorEmails.length; i++) {
+            const u = await prisma.user.findUnique({ where: { email: pub.doctorEmails[i] } });
+            if (!u) continue;
+            const d = await prisma.doctor.findUnique({ where: { userId: u.id } });
+            if (!d) continue;
+            await prisma.publicationAuthor.create({
+              data: { publicationId: pubRecord.id, doctorId: d.id, authorRole: i === 0 ? 'FIRST_AUTHOR' as any : 'CO_AUTHOR', authorOrder: i + 1 },
+            });
+            // Neo4j AUTHORED
+            await neo4jSession.run(
+              `MERGE (p:Publication {pgId: $pubId}) SET p.title = $title, p.journal = $journal
+               WITH p MATCH (d:Doctor {pgId: $docId}) MERGE (d)-[:AUTHORED]->(p)`,
+              { pubId: pubRecord.id, title: pub.title, journal: pub.journal, docId: d.id },
+            );
+          }
+
+          // Neo4j RELATES_TO specialty
+          for (const code of pub.specCodes) {
+            const spec = specialtyByCode[code];
+            if (spec) {
+              await neo4jSession.run(
+                `MATCH (p:Publication {pgId: $pubId}), (s:Specialty {pgId: $specId})
+                 MERGE (p)-[:RELATES_TO]->(s)`,
+                { pubId: pubRecord.id, specId: spec.id },
+              );
+            }
+          }
+        }
+        pubIds.push(pubRecord.id);
+      } catch { /* ignore */ }
+    }
+    // Cross-citations: each pub cites 1-2 older ones
+    for (let i = 1; i < pubIds.length; i++) {
+      try {
+        await neo4jSession.run(
+          `MATCH (a:Publication {pgId: $a}), (b:Publication {pgId: $b}) MERGE (a)-[:CITES]->(b)`,
+          { a: pubIds[i], b: pubIds[Math.floor(Math.random() * i)] },
+        );
+      } catch { /* ignore */ }
+    }
+    console.log(`  ✓ ${pubIds.length} publications created with AUTHORED + RELATES_TO + CITES\n`);
+
+    // ── STEP 10: Study Groups (PostgreSQL + Neo4j) ────────────────────────
+    console.log('👥 Step 10: Creating study groups...');
+    const STUDY_GROUPS = [
+      { name: 'Grupo de Cardiologia Intervencionista SP', description: 'Discussão de casos clínicos e novas técnicas em hemodinâmica e cardiologia intervencionista.', specCode: 'CARDIO', memberEmails: ['ana.silva@medconnect.dev', 'rodrigo.tavares@medconnect.dev', 'rafael.costa@medconnect.dev'] },
+      { name: 'Oncologia Clínica — Grupo de Pesquisa RJ/SP', description: 'Grupo multidisciplinar para discussão de protocolos oncológicos e imunoterapia.', specCode: 'ONCO', memberEmails: ['mariana.oliveira@medconnect.dev', 'fernanda.lima@medconnect.dev', 'lucas.pereira@medconnect.dev', 'isabela.franco@medconnect.dev'] },
+      { name: 'UTI & Cuidados Intensivos Brasil', description: 'Grupo nacional de intensivistas para troca de experiências em sepse, ventilação e protocolos de UTI.', specCode: 'UTI', memberEmails: ['thiago.barbosa@medconnect.dev', 'andre.pinto@medconnect.dev', 'rodrigo.tavares@medconnect.dev', 'isabela.franco@medconnect.dev'] },
+      { name: 'Neurologia e Doenças Neurodegenerativas', description: 'Pesquisadores e clínicos discutindo avanços em Alzheimer, Parkinson e esclerose múltipla.', specCode: 'NEURO', memberEmails: ['rafael.costa@medconnect.dev', 'camila.souza@medconnect.dev', 'fernanda.lima@medconnect.dev'] },
+      { name: 'Infectologia e Saúde Pública', description: 'Grupo de discussão sobre doenças infecciosas emergentes, resistência antimicrobiana e políticas de saúde.', specCode: 'INFEC', memberEmails: ['lucas.pereira@medconnect.dev', 'thiago.barbosa@medconnect.dev', 'mariana.oliveira@medconnect.dev', 'patricia.moura@medconnect.dev'] },
+    ];
+
+    let groupsCreated = 0;
+    for (const grp of STUDY_GROUPS) {
+      try {
+        const spec = specialtyByCode[grp.specCode];
+        let group = await prisma.studyGroup.findFirst({ where: { name: grp.name } });
+        if (!group) {
+          group = await prisma.studyGroup.create({
+            data: { name: grp.name, description: grp.description, specialtyId: spec?.id, isPublic: true, maxMembers: 50 },
+          });
+
+          // Add members
+          for (const email of grp.memberEmails) {
+            const u = await prisma.user.findUnique({ where: { email } });
+            if (!u) continue;
+            const d = await prisma.doctor.findUnique({ where: { userId: u.id } });
+            if (!d) continue;
+            try {
+              await prisma.studyGroupMember.create({ data: { groupId: group.id, doctorId: d.id, role: email === grp.memberEmails[0] ? 'ADMIN' : 'MEMBER' } });
+            } catch { /* already member */ }
+
+            // Neo4j MEMBER_OF
+            await neo4jSession.run(
+              `MERGE (g:StudyGroup {pgId: $gId}) SET g.name = $name
+               WITH g MATCH (d:Doctor {pgId: $dId}) MERGE (d)-[:MEMBER_OF]->(g)`,
+              { gId: group.id, name: group.name, dId: d.id },
+            );
+          }
+
+          // Neo4j FOCUSES_ON specialty
+          if (spec) {
+            await neo4jSession.run(
+              `MATCH (g:StudyGroup {pgId: $gId}), (s:Specialty {pgId: $sId}) MERGE (g)-[:FOCUSES_ON]->(s)`,
+              { gId: group.id, sId: spec.id },
+            );
+          }
+          groupsCreated++;
+        }
+      } catch (e: any) {
+        console.log(`  ✗ ${grp.name}: ${e.message?.substring(0, 60)}`);
+      }
+    }
+    console.log(`  ✓ ${groupsCreated} study groups created with MEMBER_OF + FOCUSES_ON\n`);
+
+    // ── STEP 11: Endorsements (Neo4j ENDORSED relationships) ─────────────
+    console.log('⭐ Step 11: Creating endorsements...');
+    const ENDORSEMENTS = [
+      { from: 'rafael.costa@medconnect.dev', to: 'ana.silva@medconnect.dev', skill: 'Eletrocardiograma' },
+      { from: 'rodrigo.tavares@medconnect.dev', to: 'ana.silva@medconnect.dev', skill: 'Cateterismo Cardíaco' },
+      { from: 'pedro.santos@medconnect.dev', to: 'rodrigo.tavares@medconnect.dev', skill: 'Cirurgia Robótica' },
+      { from: 'ana.silva@medconnect.dev', to: 'rodrigo.tavares@medconnect.dev', skill: 'Cirurgia Robótica' },
+      { from: 'thiago.barbosa@medconnect.dev', to: 'andre.pinto@medconnect.dev', skill: 'Ventilação Mecânica' },
+      { from: 'isabela.franco@medconnect.dev', to: 'thiago.barbosa@medconnect.dev', skill: 'Suporte Avançado de Vida' },
+      { from: 'mariana.oliveira@medconnect.dev', to: 'lucas.pereira@medconnect.dev', skill: 'Pesquisa Clínica' },
+      { from: 'camila.souza@medconnect.dev', to: 'patricia.moura@medconnect.dev', skill: 'Medicina Baseada em Evidências' },
+      { from: 'fernanda.lima@medconnect.dev', to: 'patricia.moura@medconnect.dev', skill: 'Pesquisa Clínica' },
+      { from: 'gabriel.ferreira@medconnect.dev', to: 'julia.mendes@medconnect.dev', skill: 'Ultrassonografia' },
+      { from: 'julia.mendes@medconnect.dev', to: 'gabriel.ferreira@medconnect.dev', skill: 'Endoscopia' },
+      { from: 'beatriz.alves@medconnect.dev', to: 'mariana.oliveira@medconnect.dev', skill: 'Pesquisa Clínica' },
+      { from: 'lucas.pereira@medconnect.dev', to: 'fernanda.lima@medconnect.dev', skill: 'Telemedicina' },
+      { from: 'andre.pinto@medconnect.dev', to: 'thiago.barbosa@medconnect.dev', skill: 'Hemodiálise' },
+      { from: 'patricia.moura@medconnect.dev', to: 'camila.souza@medconnect.dev', skill: 'Telemedicina' },
+    ];
+
+    let endorseCount = 0;
+    for (const e of ENDORSEMENTS) {
+      try {
+        const uFrom = await prisma.user.findUnique({ where: { email: e.from } });
+        const uTo = await prisma.user.findUnique({ where: { email: e.to } });
+        if (!uFrom || !uTo) continue;
+        const dFrom = await prisma.doctor.findUnique({ where: { userId: uFrom.id } });
+        const dTo = await prisma.doctor.findUnique({ where: { userId: uTo.id } });
+        if (!dFrom || !dTo) continue;
+        await neo4jSession.run(
+          `MATCH (a:Doctor {pgId: $from}), (b:Doctor {pgId: $to})
+           MERGE (a)-[r:ENDORSED {skill: $skill}]->(b)
+           ON CREATE SET r.count = 1
+           ON MATCH SET r.count = r.count + 1`,
+          { from: dFrom.id, to: dTo.id, skill: e.skill },
+        );
+        endorseCount++;
+      } catch { /* ignore */ }
+    }
+    console.log(`  ✓ ${endorseCount} ENDORSED relationships created\n`);
+
+    // ── STEP 12: Mentorships (Neo4j MENTORS) ─────────────────────────────
+    console.log('🎓 Step 12: Creating mentorships...');
+    const MENTORS_DATA = [
+      { mentor: 'ana.silva@medconnect.dev', mentee: 'isabela.franco@medconnect.dev' },
+      { mentor: 'rodrigo.tavares@medconnect.dev', mentee: 'pedro.santos@medconnect.dev' },
+      { mentor: 'mariana.oliveira@medconnect.dev', mentee: 'beatriz.alves@medconnect.dev' },
+      { mentor: 'lucas.pereira@medconnect.dev', mentee: 'thiago.barbosa@medconnect.dev' },
+      { mentor: 'andre.pinto@medconnect.dev', mentee: 'camila.souza@medconnect.dev' },
+      { mentor: 'gabriel.ferreira@medconnect.dev', mentee: 'julia.mendes@medconnect.dev' },
+    ];
+
+    let mentorCount = 0;
+    for (const m of MENTORS_DATA) {
+      try {
+        const uMentor = await prisma.user.findUnique({ where: { email: m.mentor } });
+        const uMentee = await prisma.user.findUnique({ where: { email: m.mentee } });
+        if (!uMentor || !uMentee) continue;
+        const dMentor = await prisma.doctor.findUnique({ where: { userId: uMentor.id } });
+        const dMentee = await prisma.doctor.findUnique({ where: { userId: uMentee.id } });
+        if (!dMentor || !dMentee) continue;
+        await neo4jSession.run(
+          `MATCH (a:Doctor {pgId: $mentor}), (b:Doctor {pgId: $mentee})
+           MERGE (a)-[:MENTORS]->(b)`,
+          { mentor: dMentor.id, mentee: dMentee.id },
+        );
+        mentorCount++;
+      } catch { /* ignore */ }
+    }
+    console.log(`  ✓ ${mentorCount} MENTORS relationships created\n`);
+
+    // ── STEP 13: University nodes + GRADUATED_FROM ────────────────────────
+    console.log('🏛️ Step 13: Creating university nodes...');
+    const allDoctors = await prisma.doctor.findMany({ select: { id: true, universityName: true } });
+    const universities = new Set(allDoctors.map(d => d.universityName).filter(Boolean));
+    let uniCount = 0;
+    for (const uniName of universities) {
+      try {
+        await neo4jSession.run(
+          `MERGE (u:University {name: $name}) WITH u
+           MATCH (d:Doctor) WHERE d.pgId IN $docIds
+           MERGE (d)-[:GRADUATED_FROM]->(u)`,
+          { name: uniName, docIds: allDoctors.filter(d => d.universityName === uniName).map(d => d.id) },
+        );
+        uniCount++;
+      } catch { /* ignore */ }
+    }
+    console.log(`  ✓ ${uniCount} University nodes + GRADUATED_FROM created\n`);
+
+    // ── STEP 14: FOLLOWS relationships ───────────────────────────────────
+    console.log('👁️ Step 14: Creating follow relationships...');
+    const FOLLOWS_DATA = [
+      ['ana.silva@medconnect.dev', 'mariana.oliveira@medconnect.dev'],
+      ['ana.silva@medconnect.dev', 'lucas.pereira@medconnect.dev'],
+      ['rafael.costa@medconnect.dev', 'patricia.moura@medconnect.dev'],
+      ['mariana.oliveira@medconnect.dev', 'beatriz.alves@medconnect.dev'],
+      ['pedro.santos@medconnect.dev', 'gabriel.ferreira@medconnect.dev'],
+      ['fernanda.lima@medconnect.dev', 'julia.mendes@medconnect.dev'],
+      ['lucas.pereira@medconnect.dev', 'andre.pinto@medconnect.dev'],
+      ['camila.souza@medconnect.dev', 'ana.silva@medconnect.dev'],
+      ['gabriel.ferreira@medconnect.dev', 'rodrigo.tavares@medconnect.dev'],
+      ['julia.mendes@medconnect.dev', 'mariana.oliveira@medconnect.dev'],
+      ['thiago.barbosa@medconnect.dev', 'lucas.pereira@medconnect.dev'],
+      ['beatriz.alves@medconnect.dev', 'fernanda.lima@medconnect.dev'],
+      ['rodrigo.tavares@medconnect.dev', 'rafael.costa@medconnect.dev'],
+      ['isabela.franco@medconnect.dev', 'julia.mendes@medconnect.dev'],
+      ['andre.pinto@medconnect.dev', 'rafael.costa@medconnect.dev'],
+      ['patricia.moura@medconnect.dev', 'fernanda.lima@medconnect.dev'],
+    ];
+
+    let followCount = 0;
+    for (const [fromEmail, toEmail] of FOLLOWS_DATA) {
+      try {
+        const uFrom = await prisma.user.findUnique({ where: { email: fromEmail } });
+        const uTo = await prisma.user.findUnique({ where: { email: toEmail } });
+        if (!uFrom || !uTo) continue;
+        const dFrom = await prisma.doctor.findUnique({ where: { userId: uFrom.id } });
+        const dTo = await prisma.doctor.findUnique({ where: { userId: uTo.id } });
+        if (!dFrom || !dTo) continue;
+        await neo4jSession.run(
+          `MATCH (a:Doctor {pgId: $from}), (b:Doctor {pgId: $to}) MERGE (a)-[:FOLLOWS]->(b)`,
+          { from: dFrom.id, to: dTo.id },
+        );
+        followCount++;
+      } catch { /* ignore */ }
+    }
+    console.log(`  ✓ ${followCount} FOLLOWS relationships created\n`);
+
+    // ── STEP 15: Graph statistics ────────────────────────────────────────
+    console.log('📊 Step 15: Final graph statistics...\n');
     try {
       const stats = await neo4jSession.run(`
         MATCH (d:Doctor) WITH count(d) AS doctors
@@ -923,7 +1181,12 @@ async function main() {
         OPTIONAL MATCH ()-[sp:SPECIALIZES_IN]->() WITH doctors, specialties, institutions, jobs, events, connections, count(sp) AS specRels
         OPTIONAL MATCH ()-[w:WORKS_AT]->() WITH doctors, specialties, institutions, jobs, events, connections, specRels, count(w) AS worksAt
         OPTIONAL MATCH ()-[p:POSTED]->() WITH doctors, specialties, institutions, jobs, events, connections, specRels, worksAt, count(p) AS posted
-        RETURN doctors, specialties, institutions, jobs, events, connections, specRels, worksAt, posted
+        OPTIONAL MATCH ()-[au:AUTHORED]->() WITH doctors, specialties, institutions, jobs, events, connections, specRels, worksAt, posted, count(au) AS authored
+        OPTIONAL MATCH ()-[mo:MEMBER_OF]->() WITH doctors, specialties, institutions, jobs, events, connections, specRels, worksAt, posted, authored, count(mo) AS memberOf
+        OPTIONAL MATCH ()-[en:ENDORSED]->() WITH doctors, specialties, institutions, jobs, events, connections, specRels, worksAt, posted, authored, memberOf, count(en) AS endorsed
+        OPTIONAL MATCH ()-[me:MENTORS]->() WITH doctors, specialties, institutions, jobs, events, connections, specRels, worksAt, posted, authored, memberOf, endorsed, count(me) AS mentors
+        OPTIONAL MATCH ()-[fo:FOLLOWS]->() WITH doctors, specialties, institutions, jobs, events, connections, specRels, worksAt, posted, authored, memberOf, endorsed, mentors, count(fo) AS follows
+        RETURN doctors, specialties, institutions, jobs, events, connections, specRels, worksAt, posted, authored, memberOf, endorsed, mentors, follows
       `);
       const r = stats.records[0];
       console.log(`  ┌─────────────────────────────────────┐`);
@@ -938,6 +1201,11 @@ async function main() {
       console.log(`  │  SPECIALIZES_IN:    ${String(r.get('specRels')).padEnd(16)}│`);
       console.log(`  │  WORKS_AT:          ${String(r.get('worksAt')).padEnd(16)}│`);
       console.log(`  │  POSTED:            ${String(r.get('posted')).padEnd(16)}│`);
+      console.log(`  │  AUTHORED:          ${String(r.get('authored')).padEnd(16)}│`);
+      console.log(`  │  MEMBER_OF:         ${String(r.get('memberOf')).padEnd(16)}│`);
+      console.log(`  │  ENDORSED:          ${String(r.get('endorsed')).padEnd(16)}│`);
+      console.log(`  │  MENTORS:           ${String(r.get('mentors')).padEnd(16)}│`);
+      console.log(`  │  FOLLOWS:           ${String(r.get('follows')).padEnd(16)}│`);
       console.log(`  └─────────────────────────────────────┘`);
     } catch (e: any) {
       console.log(`  Stats query failed: ${e.message}`);

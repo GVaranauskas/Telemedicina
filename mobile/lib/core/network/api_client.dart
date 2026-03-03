@@ -3,8 +3,13 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class ApiClient {
-  /// Base URL configurable via environment.
-  /// For web (Chrome), localhost works. For real devices, use the machine IP.
+  /// Base URL configurable via environment variable API_URL.
+  ///
+  /// Usage:
+  ///   Chrome/Web:        localhost:3000 works as-is
+  ///   Android emulator:  flutter run --dart-define=API_URL=http://10.0.2.2:3000/api/v1
+  ///   iOS simulator:     flutter run --dart-define=API_URL=http://127.0.0.1:3000/api/v1
+  ///   Real device:       flutter run --dart-define=API_URL=http://<YOUR_MACHINE_IP>:3000/api/v1
   static String get baseUrl {
     const envUrl = String.fromEnvironment('API_URL');
     if (envUrl.isNotEmpty) return envUrl;
@@ -97,9 +102,18 @@ class ApiClient {
     await _storage.write(key: 'refresh_token', value: refreshToken);
   }
 
+  static Future<void> saveUserRole(String role) async {
+    await _storage.write(key: 'user_role', value: role);
+  }
+
+  static Future<String?> getUserRole() async {
+    return _storage.read(key: 'user_role');
+  }
+
   static Future<void> clearTokens() async {
     await _storage.delete(key: 'access_token');
     await _storage.delete(key: 'refresh_token');
+    await _storage.delete(key: 'user_role');
   }
 
   static Future<String?> getAccessToken() async {

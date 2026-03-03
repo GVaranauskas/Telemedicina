@@ -171,4 +171,10 @@ export class FeedController {
   ) {
     return this.feedService.getBookmarks(doctorId, limit ? Number(limit) : 20);
   }
+
+  @Get('trending')
+  @ApiOperation({ summary: 'Get trending tags and top posts from the last 48h' })
+  async getTrending(@Query('limit') limit?: number) {
+    return this.feedService.getTrending(limit ? Number(limit) : 20);
+  }
 }

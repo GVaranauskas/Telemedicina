@@ -63,6 +63,30 @@ export class AppointmentController {
     return this.appointmentService.cancelAppointment(id, userId, role, dto);
   }
 
+  @Get('patient/me')
+  @ApiOperation({ summary: 'Get my appointments as patient' })
+  @ApiQuery({ name: 'status', required: false })
+  @ApiQuery({ name: 'upcoming', required: false, type: Boolean })
+  @ApiQuery({ name: 'past', required: false, type: Boolean })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  async getPatientAppointments(
+    @CurrentUser('patientId') patientId: string,
+    @Query('status') status?: string,
+    @Query('upcoming') upcoming?: string,
+    @Query('past') past?: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    return this.appointmentService.getPatientAppointments(patientId, {
+      status,
+      upcoming: upcoming === 'true',
+      past: past === 'true',
+      page: page ? Number(page) : 1,
+      limit: limit ? Number(limit) : 20,
+    });
+  }
+
   // ─── Doctor endpoints ──────────────────────────────────────────
 
   @Patch(':id/confirm')

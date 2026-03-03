@@ -166,7 +166,7 @@ class _PostState extends ConsumerState<_Post> {
               onTap: () => context.push('/doctor/${post.authorId}'),
               child: CircleAvatar(
                 radius: 20,
-                backgroundColor: avatarColor.withOpacity(0.15),
+                backgroundColor: avatarColor.withValues(alpha: 0.15),
                 child: Text(
                   initials,
                   style: TextStyle(
@@ -210,7 +210,29 @@ class _PostState extends ConsumerState<_Post> {
                       ),
                       const SizedBox(width: 4),
                       GestureDetector(
-                        onTap: () {},
+                        onTap: () => showModalBottomSheet(
+                          context: context,
+                          builder: (_) => SafeArea(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                ListTile(
+                                  leading: const Icon(Icons.open_in_new),
+                                  title: const Text('Ver post'),
+                                  onTap: () {
+                                    Navigator.pop(context);
+                                    context.push('/post/${post.postId}');
+                                  },
+                                ),
+                                ListTile(
+                                  leading: const Icon(Icons.bookmark_border),
+                                  title: const Text('Salvar'),
+                                  onTap: () => Navigator.pop(context),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                         child: const Icon(Icons.more_horiz,
                             size: 18, color: Color(0xFF536471)),
                       ),

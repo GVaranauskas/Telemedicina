@@ -24,6 +24,7 @@ import {
 } from './dto/add-specialty.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { BlockType } from '@prisma/client';
 
 @ApiTags('Doctors')
 @Controller('doctors')
@@ -129,6 +130,68 @@ export class DoctorController {
   async removeExperience(@Param('experienceId') experienceId: string) {
     await this.doctorService.removeExperience(experienceId);
     return { message: 'Experience removed' };
+  }
+
+  // ─── Agenda ─────────────────────────────────────────────────
+
+  @Get('me/agenda')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get consolidated doctor agenda (appointments + shifts + blocks)' })
+  @ApiQuery({ name: 'from', required: false, description: 'ISO date string' })
+  @ApiQuery({ name: 'to', required: false, description: 'ISO date string' })
+  async getAgenda(
+    @CurrentUser('doctorId') doctorId: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    const fromDate = from ? new Date(from) : new Date();
+    const toDate = to ? new Date(to) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    return this.doctorService.getAgenda(doctorId, fromDate, toDate);
+  }
+
+  @Get('me/shifts')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get my shift assignments' })
+  @ApiQuery({ name: 'from', required: false })
+  @ApiQuery({ name: 'to', required: false })
+  async getShifts(
+    @CurrentUser('doctorId') doctorId: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    const fromDate = from ? new Date(from) : new Date();
+    const toDate = to ? new Date(to) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    return this.doctorService.getShifts(doctorId, fromDate, toDate);
+  }
+
+  @Post('me/schedule-blocks')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Create a schedule block (vacation, conference, etc.)' })
+  async createScheduleBlock(
+    @CurrentUser('doctorId') doctorId: string,
+    @Body() dto: { startDate: string; endDate: string; blockType: BlockType; reason?: string },
+  ) {
+    return this.doctorService.createScheduleBlock(doctorId, {
+      startDate: new Date(dto.startDate),
+      endDate: new Date(dto.endDate),
+      blockType: dto.blockType,
+      reason: dto.reason,
+    });
+  }
+
+  @Delete('me/schedule-blocks/:blockId')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Delete a schedule block' })
+  async deleteScheduleBlock(
+    @CurrentUser('doctorId') doctorId: string,
+    @Param('blockId') blockId: string,
+  ) {
+    await this.doctorService.deleteScheduleBlock(doctorId, blockId);
+    return { message: 'Schedule block deleted' };
   }
 
   // ─── Search & Reference Data ────────────────────────────────
